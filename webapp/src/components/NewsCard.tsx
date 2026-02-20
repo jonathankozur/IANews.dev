@@ -121,21 +121,23 @@ export default function NewsCard({ event, preferredLeaning, isWildcard, sessionI
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-indigo-500" title="Ruptura de Cámara de Eco" />
             )}
 
-            {/* Dev Mode Action */}
-            <div className="flex justify-between px-4 pt-2 items-center">
-                {isWildcard ? (
-                    <span className="text-xs font-mono text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded">
-                        🎯 {dict.card.alternative}
-                    </span>
-                ) : <div />}
+            {/* Dev Mode Action (Hidden in Production) */}
+            {process.env.NODE_ENV !== 'production' && (
+                <div className="flex justify-between px-4 pt-2 items-center">
+                    {isWildcard ? (
+                        <span className="text-xs font-mono text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded">
+                            🎯 {dict.card.alternative}
+                        </span>
+                    ) : <div />}
 
-                <button
-                    onClick={() => setDevMode(!devMode)}
-                    className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                >
-                    {devMode ? '🛑' : '🛠️'} {dict.card.devMode}
-                </button>
-            </div>
+                    <button
+                        onClick={() => setDevMode(!devMode)}
+                        className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    >
+                        {devMode ? '🛑' : '🛠️'} {dict.card.devMode}
+                    </button>
+                </div>
+            )}
 
             {/* Always Visible Section */}
             <div className="p-6 pb-4">
@@ -145,7 +147,7 @@ export default function NewsCard({ event, preferredLeaning, isWildcard, sessionI
                             day: 'numeric', month: 'short', year: 'numeric'
                         })} • {event.category || 'General'}
                     </p>
-                    {!devMode && (
+                    {!devMode && process.env.NODE_ENV !== 'production' && (
                         <span className="text-xs font-mono bg-indigo-50 dark:bg-indigo-900/20 px-2 py-1 rounded text-indigo-500 dark:text-indigo-400">
                             {activeVariant.policy_label || activeTab}
                         </span>

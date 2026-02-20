@@ -1,6 +1,10 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import DevDashboard from '@/components/DevDashboard';
+import Footer from '@/components/Footer';
+import { cookies, headers } from 'next/headers';
+import { getDictionary } from '@/lib/i18n';
 
 // Using Inter as the primary font for maximum legibility (Designer Rule 1)
 const inter = Inter({
@@ -14,13 +18,29 @@ export const metadata: Metadata = {
   description: 'Portal de noticias generado por IA, ofreciendo múltiples perspectivas ideológicas sin fricciones.',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = await cookies();
+  const sessionId = cookieStore.get('session_id')?.value;
+
+  // i18n Language Detection for Layout
+  const headersList = await headers();
+  const acceptLanguage = headersList.get('accept-language') || 'es';
+  let userLanguage = acceptLanguage.toLowerCase().startsWith('en') ? 'en' : 'es';
+
+  // DEV OVERRIDE
+  const devLangOverride = cookieStore.get('dev_lang_override')?.value;
+  if (devLangOverride === 'es' || devLangOverride === 'en') {
+    userLanguage = devLangOverride;
+  }
+
+  const dict = getDictionary(userLanguage);
+
   return (
-    <html lang="es" className={`${inter.variable}`}>
+    <html lang={userLanguage} className={`${inter.variable}`}>
       <body className="min-h-screen flex flex-col antialiased selection:bg-blue-200 dark:selection:bg-blue-900">
 
         {/* Simple, fast-loading Header */}
@@ -31,8 +51,8 @@ export default function RootLayout({
             </h1>
             <nav>
               <ul className="flex space-x-6 text-sm font-medium text-gray-600 dark:text-gray-300">
-                <li><a href="/" className="hover:text-gray-900 dark:hover:text-white transition-colors">Inicio</a></li>
-                <li><a href="#" className="hover:text-gray-900 dark:hover:text-white transition-colors">Tendencias</a></li>
+                <li><a href="/" className="hover:text-gray-900 dark:hover:text-white transition-colors">{dict.nav.news}</a></li>
+                <li><a href="/about" className="hover:text-gray-900 dark:hover:text-white transition-colors">{dict.nav.about}</a></li>
               </ul>
             </nav>
           </div>
@@ -40,12 +60,11 @@ export default function RootLayout({
 
         <main className="flex-grow">
           {children}
+          {sessionId && <DevDashboard sessionId={sessionId} />}
         </main>
 
-        {/* Minimal Footer */}
-        <footer className="w-full border-t border-gray-200 dark:border-gray-800 mt-16 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-          <p>© {new Date().getFullYear()} IANews.dev. Autogestionado por Inteligencia Artificial.</p>
-        </footer>
+        {/* Dynamic Footer Component */}
+        <Footer locale={userLanguage} />
       </body>
     </html>
   );

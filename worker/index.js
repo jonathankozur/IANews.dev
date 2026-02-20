@@ -1,68 +1,135 @@
 require('dotenv').config();
 const supabase = require('./supabaseClient');
 const aiService = require('./aiService');
+const GNewsProvider = require('./providers/GNewsProvider');
 
-async function procesarNuevaNoticia(titulo, hechosResumen) {
+async function procesarNoticiaCruda(articleData) {
     console.log(`\n======================================`);
-    console.log(`[▶] Iniciando procesamiento de noticia: ${titulo}`);
+    console.log(`[▶] Iniciando pipeline de procesamiento: ${articleData.title}`);
 
     try {
-        // 1. Insertar el Evento Raíz en Supabase
-        console.log(`[1] Guardando Evento Raíz en DB...`);
-        const { data: eventData, error: eventError } = await supabase
+        const slug = articleData.title.toLowerCase()
+            .replace(/[^\w ]+/g, '')
+            .replace(/ +/g, '-') + '-' + Math.random().toString(36).substring(2, 7);
+
+        // 1. Check if we already processed a similar title recently
+        const { data: existing } = await supabase
             .from('news_events')
-            .insert([{ title: titulo, objective_summary: hechosResumen }])
-            .select()
-            .single();
+            .select('id')
+            .ilike('title', articleData.title) // ilike for case-insensitive
+            .maybeSingle();
 
-        if (eventError) throw eventError;
+        if (existing) {
+            console.log(`[!] Noticia ya existente en BD. Saltando...`);
+            return false; // Return false to indicate it was skipped
+        }
 
-        const eventId = eventData.id;
-        console.log(`[✓] Evento guardado con ID: ${eventId}`);
+        console.log(`[1] Limpiando sesgo periodístico de la fuente original...`);
+        const hechosResumen = await aiService.extraerHechosObjetivos(articleData.content);
 
-        // 2. Usar la IA para generar las 3 posturas
-        console.log(`[2] Solicitando a la IA las posturas ideológicas...`);
+        console.log(`[2] Solicitando a la IA las posturas ideológicas personalizadas...`);
         const variantes = await aiService.generarVariantesDeNoticia(hechosResumen);
 
-        // 3. Preparar e insertar las variantes en Supabase
-        console.log(`[3] Guardando Variantes en DB...`);
-        const variantsToInsert = [
-            { event_id: eventId, policy_type: 'left', title: variantes.left.title, content: variantes.left.content, sentiment_score: variantes.left.sentiment },
-            { event_id: eventId, policy_type: 'center', title: variantes.center.title, content: variantes.center.content, sentiment_score: variantes.center.sentiment },
-            { event_id: eventId, policy_type: 'right', title: variantes.right.title, content: variantes.right.content, sentiment_score: variantes.right.sentiment },
-        ];
+        console.log(`[3] Guardando Evento Raíz y Variantes en DB (Categoría: ${variantes.category}, Geo: ${variantes.geo_target || 'GLOBAL'})...`);
 
-        const { error: variantError } = await supabase
-            .from('news_variants')
-            .insert(variantsToInsert);
+        // Ensure translations exist
+        const translations = variantes.translations || [];
 
-        if (variantError) throw variantError;
+        for (const trans of translations) {
+            // Uniquify slug by language to avoid constraint collision on dual inserts
+            const langSlug = `${slug}-${trans.language}`;
 
-        console.log(`[✓] 3 Variantes guardadas correctamente.`);
-        console.log(`[✔] Procesamiento exitoso para: ${titulo}\n`);
+            const { data: eventData, error: eventError } = await supabase
+                .from('news_events')
+                .insert([{
+                    title: articleData.title,
+                    objective_summary: trans.objective_summary || hechosResumen, // Fallback to raw summary if missing from translation
+                    slug: langSlug,
+                    category: variantes.category || 'General',
+                    source_name: articleData.source_name,
+                    source_url: articleData.source_url,
+                    language: trans.language || 'es',
+                    geo_target: variantes.geo_target || 'GLOBAL',
+                    image_url: articleData.image_url,
+                    tags: ['ia', 'noticias', trans.language, articleData.source_name.toLowerCase()]
+                }])
+                .select()
+                .single();
+
+            if (eventError) throw eventError;
+
+            const eventId = eventData.id;
+            console.log(`[✓] Evento guardado [${trans.language}] ID: ${eventId} (Slug: ${langSlug})`);
+
+            console.log(`[4] Guardando Variantes [${trans.language}] en DB...`);
+            const variantsToInsert = [
+                { event_id: eventId, policy_type: 'left', policy_label: trans.left.label, title: trans.left.title, content: trans.left.content, sentiment_score: trans.left.sentiment },
+                { event_id: eventId, policy_type: 'center', policy_label: trans.center.label, title: trans.center.title, content: trans.center.content, sentiment_score: trans.center.sentiment },
+                { event_id: eventId, policy_type: 'right', policy_label: trans.right.label, title: trans.right.title, content: trans.right.content, sentiment_score: trans.right.sentiment },
+            ];
+
+            const { error: variantError } = await supabase
+                .from('news_variants')
+                .insert(variantsToInsert);
+
+            if (variantError) throw variantError;
+            console.log(`[✓] 3 Variantes guardadas correctamente para idioma ${trans.language}.`);
+        }
+
+        console.log(`[✔] Procesamiento multi-idioma exitoso para: ${articleData.title}\n`);
+        return true; // Indicates success
 
     } catch (error) {
-        console.error(`[X] Error procesando la noticia:`, error);
+        console.error(`[X] Error crítico procesando la noticia:`, error);
+        return false;
     }
 }
 
-// Simulación de ejecución (esto en el futuro será disparado por el cron de Github Actions)
-async function startWorker() {
-    console.log("Iniciando News Worker...");
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-    const mockTrends = [
-        {
-            title: "Nueva tecnología disruptiva anunciada",
-            hechos: "Empresa tecnológica anuncia chip cuántico funcional a temperatura ambiente. Costo estimado de desarrollo de 2 billones."
-        },
-        {
-            title: "Acuerdo tarifario bloqueado",
-            hechos: "El senado no logra consenso para el nuevo paquete tarifario. Exportaciones suspendidas por 48 hs."
+async function fetchAndProcessCycle(provider) {
+    const noticiasTendencia = await provider.fetchTrendingNews();
+
+    if (noticiasTendencia.length === 0) {
+        console.log("No se devolvió ninguna noticia válida de GNews.");
+        return 0;
+    }
+
+    let procesadas = 0;
+    for (const article of noticiasTendencia) {
+        const exitoso = await procesarNoticiaCruda(article);
+        if (exitoso) {
+            procesadas++;
+            // Rate Limit respect: Esperamos 10 segundos entre cada noticia procesada exitosamente con Gemini
+            console.log("⏳ Esperando 10 segundos por Rate Limit de Gemini API antes de la siguiente noticia...");
+            await wait(10000);
         }
-    ];
+    }
+    return procesadas;
+}
 
-    for (const trend of mockTrends) {
-        await procesarNuevaNoticia(trend.title, trend.hechos);
+// Inicialización del agregador
+async function startWorker() {
+    const args = process.argv.slice(2);
+    const isContinuous = args.includes('--mode=continuous');
+
+    console.log(`Iniciando News Aggregator Worker con API Real... (Modo: ${isContinuous ? 'CONTINUO' : 'ÚNICO'})`);
+
+    const provider = new GNewsProvider(process.env.GNEWS_API_KEY);
+
+    if (isContinuous) {
+        console.log("♾️ El worker correrá indefinidamente. Presiona Ctrl+C para detenerlo.");
+        while (true) {
+            console.log("\n📡 --- Iniciando nuevo ciclo de escaneo ---");
+            const procesadas = await fetchAndProcessCycle(provider);
+            console.log(`\n🛑 Ciclo finalizado. Se procesaron ${procesadas} noticias nuevas.`);
+            console.log("⏳ Durmiendo 5 minutos antes de buscar más novedades...");
+            await wait(5 * 60 * 1000); // Wait 5 minutes between full top-headlines scans
+        }
+    } else {
+        console.log("\n📡 --- Iniciando escaneo único ---");
+        const procesadas = await fetchAndProcessCycle(provider);
+        console.log(`\n🎉 Worker finalizado. Se procesaron ${procesadas} noticias nuevas en esta pasada.`);
     }
 }
 

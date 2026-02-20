@@ -5,6 +5,7 @@ import DevDashboard from '@/components/DevDashboard';
 import Footer from '@/components/Footer';
 import { cookies, headers } from 'next/headers';
 import { getDictionary } from '@/lib/i18n';
+import { Analytics } from "@vercel/analytics/next";
 
 // Using Inter as the primary font for maximum legibility (Designer Rule 1)
 const inter = Inter({
@@ -65,6 +66,8 @@ export default async function RootLayout({
 
         {/* Dynamic Footer Component */}
         <Footer locale={userLanguage} />
+
+        <Analytics />
       </body>
     </html>
   );

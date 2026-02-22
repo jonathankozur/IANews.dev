@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { cookies, headers } from 'next/headers';
-import NewsCard from '@/components/NewsCard';
+import NewsFeedClient from '@/components/NewsFeedClient';
 import { getUserLeaning, getUserCategoryPreferences, getCategoryLeaningMatrix, PolicyType } from '@/lib/personalization';
 import { getDictionary } from '@/lib/i18n';
 
@@ -8,36 +8,52 @@ export const dynamic = 'force-dynamic';
 
 async function getNews(userLanguage: string, userCountry: string) {
   const { data, error } = await supabase
-    .from('news_events')
+    .from('neutral_news')
     .select(`
       id,
       title,
       slug,
       category,
       objective_summary,
-      source_name,
-      source_url,
-      language,
+      raw_article:raw_articles (
+        source_name,
+        source_url,
+        image_url_original,
+        image_url_ai,
+        image_url_stock
+      ),
       geo_target,
-      published_at,
-      variants:news_variants (
+      published_at:created_at,
+      variants:news_variants!inner (
         id,
         policy_type,
+        policy_label,
         title,
         content,
         sentiment_score,
         created_at
       )
     `)
-    .eq('language', userLanguage)
+    .eq('news_variants.language', userLanguage)
     .in('geo_target', [userCountry, 'GLOBAL'])
-    .order('published_at', { ascending: false }); // Get all, we will sort them in memory
+    .order('created_at', { ascending: false })
+    .limit(10); // LIMIT ADDED HERE FOR THE INITIAL RENDER
 
   if (error) {
     console.error("Error fetching news:", error);
     return [];
   }
-  return data;
+
+  // Map to flat structure expected by NewsCard
+  return data.map((item: any) => ({
+    ...item,
+    source_name: Array.isArray(item.raw_article) ? item.raw_article[0]?.source_name : item.raw_article?.source_name,
+    source_url: Array.isArray(item.raw_article) ? item.raw_article[0]?.source_url : item.raw_article?.source_url,
+    image_url_original: Array.isArray(item.raw_article) ? item.raw_article[0]?.image_url_original : item.raw_article?.image_url_original,
+    image_url_ai: Array.isArray(item.raw_article) ? item.raw_article[0]?.image_url_ai : item.raw_article?.image_url_ai,
+    image_url_stock: Array.isArray(item.raw_article) ? item.raw_article[0]?.image_url_stock : item.raw_article?.image_url_stock,
+    language: userLanguage
+  }));
 }
 
 export default async function Home() {
@@ -67,7 +83,7 @@ export default async function Home() {
   }
 
   // Fetch data in parallel
-  const [rawNewsEvents, leaningData, categoryPreferences, categoryMatrix] = await Promise.all([
+  const [initialNewsEvents, leaningData, categoryPreferences, categoryMatrix] = await Promise.all([
     getNews(userLanguage, userCountry),
     getUserLeaning(sessionId),
     getUserCategoryPreferences(sessionId),
@@ -77,27 +93,6 @@ export default async function Home() {
   const dict = getDictionary(userLanguage);
 
   const { leaning: globalPolicy } = leaningData;
-
-  // 1. Feed Sorting Algorithm
-  // Calculate a "relevance score" for each article to sort the feed
-  const sortedNewsEvents = [...rawNewsEvents].map(event => {
-    let relevance = 0;
-
-    // A. Category Relevance (Up to 50 points based on previous interactions)
-    // Normalize or just add the raw category score
-    const catScore = categoryPreferences[event.category || 'General'] || 0;
-    relevance += catScore;
-
-    // B. Recency Relevance
-    // The fresher the news, the higher the base score (decay over days)
-    const daysOld = (new Date().getTime() - new Date(event.published_at).getTime()) / (1000 * 3600 * 24);
-    if (daysOld < 1) relevance += 100; // Today's news is king
-    else if (daysOld < 3) relevance += 50;
-    else relevance -= (daysOld * 2);
-
-    return { ...event, relevance };
-  }).sort((a, b) => b.relevance - a.relevance); // Descending order of relevance
-
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
@@ -111,42 +106,16 @@ export default async function Home() {
         </p>
       </div>
 
-      <div className="space-y-10">
-        {sortedNewsEvents.length === 0 ? (
-          <div className="text-center py-20 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">{dict.feed.noNews}</h3>
-            <p className="mt-1 text-sm text-gray-500">{dict.feed.runWorker}</p>
-          </div>
-        ) : (
-          sortedNewsEvents.map((event) => {
-
-            // Determinar la postura preferida para esta categoría particular
-            const eventCategory = event.category || 'General';
-            const categoryPreferredPolicy = categoryMatrix[eventCategory] || globalPolicy;
-
-            // Per-article Wildcard Logic (20% chance)
-            const isWildcardRoll = Math.random() < 0.20;
-            let finalLeaning = categoryPreferredPolicy;
-            const perspectives: PolicyType[] = ['left', 'center', 'right'];
-
-            if (isWildcardRoll) {
-              const alternatives = perspectives.filter(p => p !== categoryPreferredPolicy);
-              finalLeaning = alternatives[Math.floor(Math.random() * alternatives.length)];
-            }
-
-            return (
-              <NewsCard
-                key={event.id}
-                event={event as any}
-                preferredLeaning={finalLeaning}
-                isWildcard={isWildcardRoll && finalLeaning !== categoryPreferredPolicy}
-                sessionId={sessionId}
-                dict={dict}
-              />
-            );
-          })
-        )}
-      </div>
+      <NewsFeedClient
+        initialEvents={initialNewsEvents}
+        sessionId={sessionId}
+        globalPolicy={globalPolicy}
+        categoryPreferences={categoryPreferences}
+        categoryMatrix={categoryMatrix}
+        dict={dict}
+        userLanguage={userLanguage}
+        userCountry={userCountry}
+      />
 
     </div>
   );

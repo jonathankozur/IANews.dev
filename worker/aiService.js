@@ -71,28 +71,32 @@ async function callGeminiWithRetry(prompt, isJson = false, modelIndex = 0, retry
     }
 }
 
-async function extraerHechosObjetivos(textoCrudo) {
-    console.log(`[🤖 IA Service] Limpiando sesgo original y extrayendo hechos objetivos...`);
+async function analizarYExtraerCrudo(textoCrudo, titulo) {
+    console.log(`[🤖 IA Service] Analizando sesgo original y extrayendo hechos objetivos...`);
 
     const prompt = `
-Eres un editor periodístico completamente imparcial y objetivo (similar a las directrices de Reuters o Associated Press).
-Tu única tarea es agarrar el siguiente texto (que puede ser partidista, sensacionalista o estar sesgado) y extraer exclusivamente los Hechos Verificables.
-- Elimina todos los adjetivos calificativos emocionales.
-- Elimina cualquier especulación, opinión o postura del autor.
-- Devuelve un resumen frío y objetivo de entre 1 y 2 párrafos cortos (máximo 80-100 palabras).
-- No uses frases introductorias como "Aquí están los hechos" o "Este es el resumen", simplemente escupe el texto directo.
+Eres un analista político y lingüístico experto. Tu tarea es analizar el siguiente artículo periodístico y realizar dos acciones específicas:
 
-Texto Original:
-"${textoCrudo}"
+1. Calcular el Sesgo Original: Determina si el texto está inclinado a la 'Izquierda', 'Derecha', o si es de 'Centro'. Calcula un porcentaje de qué tan fuerte es ese sesgo (0 a 100).
+2. Extraer Hechos: Escribe un resumen completamente frío, neutral e impersonal (máximo 80-100 palabras) usando solo los hechos comprobables, eliminando adjetivos emocionales o de opinión.
+
+Título: "${titulo}"
+Texto Original: "${textoCrudo.substring(0, 3000)}"
+
+IMPORTANTE: Responde ÚNICAMENTE con un JSON válido usando esta estructura exacta:
+{
+  "original_bias_direction": "Izquierda" | "Derecha" | "Centro",
+  "original_bias_score": Número de 0 a 100,
+  "objective_summary": "String con el resumen neutral"
+}
 `;
 
     try {
-        const text = await callGeminiWithRetry(prompt, false);
-        return text.trim();
+        const responseText = await callGeminiWithRetry(prompt, true);
+        return JSON.parse(responseText);
     } catch (error) {
-        console.error("[❌ IA Service] Failed to extract objective facts:", error.message);
-        // Fallback gracefully
-        return textoCrudo.substring(0, 300) + "... (Nota: Limpieza de sesgo fallida por error persistente de IA)";
+        console.error("[❌ IA Service] Failed to analyze and extract facts:", error.message);
+        return null; // The worker will handle the retry logic
     }
 }
 
@@ -175,7 +179,75 @@ IMPORTANTE: TU RESPUESTA DEBE SER ÚNICAMENTE UN JSON VÁLIDO CON LA SIGUIENTE E
     }
 }
 
+async function esNoticiaDePoliticaOEconomiaArgentina(titulo, texto) {
+    if (!texto || texto.length < 100) return false;
+
+    // Check local cache/rules quickly to avoid API call if obviously wrong
+    const lowerTitle = titulo.toLowerCase();
+    const blacklist = ['horóscopo', 'gran hermano', 'farándula', 'clima', 'pronóstico', 'espectáculos', 'cine', 'netflix'];
+    if (blacklist.some(word => lowerTitle.includes(word))) return false;
+
+    console.log(`[🤖 IA Service] Evaluando relevancia temática: "${titulo}"`);
+
+    const prompt = `
+Determina si el siguiente artículo trata DIRECTAMENTE de POLÍTICA o ECONOMÍA ARGENTINA.
+Si es sobre espectáculos, farándula, chismes, policiales menores, deportes (salvo que implique política nacional), clima, o noticias internacionales que no afectan a Argentina, devuelve false.
+Si es sobre el Presidente, ministros, leyes, inflación, dólar, cepo, Congreso, paritarias, gobernadores, etc., devuelve true.
+
+Título: "${titulo}"
+Extracto: "${texto.substring(0, 600)}"
+
+Reglas:
+1. Responde ÚNICAMENTE un JSON válido con esta estructura: {"es_relevante": boolean}
+2. Sé exigente. Ante la duda de si es un policial suelto o nota de color, pon false.
+`;
+
+    try {
+        // Use flash-lite if possible for cost-savings on filtering
+        const responseText = await callGeminiWithRetry(prompt, true, 6); // Index 6 is usually gemini-2.5-flash-lite
+        const jsonResponse = JSON.parse(responseText);
+        return jsonResponse.es_relevante === true;
+    } catch (error) {
+        console.error("[❌ IA Service] Filter checking failed:", error.message);
+        // Fallback to true if we hit errors to not drop news, but ideally monitor this
+        return true;
+    }
+}
+
+async function generarTweetViral(noticia) {
+    console.log(`[🤖 IA Service] Generando gancho viral para Twitter (X)...`);
+
+    const prompt = `
+Eres un Community Manager experto en periodismo político y viralidad en Twitter/X.
+Tu objetivo es redactar un (1) único tweet MUY ENGANCHADOR para promocionar un artículo de nuestro portal de noticias "IANews".
+La particularidad de nuestro portal es que ofrecemos la misma noticia redactada desde tres enfoques (Izquierda, Centro y Derecha) para que la gente "salga de su burbuja".
+
+Noticia: "${noticia.tituloOriginal}"
+Resumen: "${noticia.resumen}"
+Titular de Izquierda: "${noticia.izquierda}"
+Titular de Derecha: "${noticia.derecha}"
+
+Reglas estrictas para el Tweet:
+1. MAXIMO 200 caracteres (dejaremos espacio para el link que se agregará después).
+2. Tono incisivo, filoso o que incite al debate (muy al estilo del "Termo Político" o Twitter Argentina).
+3. No uses hashtags molestos como #Noticias ni emoticons innecesarios (1 o 2 máximo).
+4. Plantea el choque de visiones basado en los titulares de izquierda y derecha provistos.
+5. NO incluyas a qué enlace deben hacer clic (eso lo manejo yo por código).
+6. Responde ÚNICAMENTE con el texto del tweet, sin comillas alrededor ni texto introductorio. 
+`;
+
+    try {
+        const text = await callGeminiWithRetry(prompt, false, 4); // Index 4 is gemini-2.5-flash
+        return text.trim().replace(/^"|"$/g, ''); // Quita comillas si la IA decide ponerlas igual
+    } catch (error) {
+        console.error("[❌ IA Service] Failed to generate Tweet:", error.message);
+        return null;
+    }
+}
+
 module.exports = {
     generarVariantesDeNoticia,
-    extraerHechosObjetivos
+    analizarYExtraerCrudo,
+    esNoticiaDePoliticaOEconomiaArgentina,
+    generarTweetViral
 };

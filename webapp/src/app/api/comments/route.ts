@@ -11,6 +11,15 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Faltan parámetros' }, { status: 400 });
         }
 
+        // Ensure user_profile exists to satisfy foreign key constraint of comments
+        const { error: profileError } = await supabase
+            .from('user_profiles')
+            .upsert({ session_id }, { onConflict: 'session_id' });
+
+        if (profileError) {
+            console.error('Error upserting user profile for comments:', profileError);
+        }
+
         // Get the author's current political leaning to give the comment a weight
         const { leaning: author_leaning } = await getUserLeaning(session_id);
 

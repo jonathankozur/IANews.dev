@@ -97,7 +97,7 @@ export async function getUserCategoryPreferences(sessionId: string | undefined):
     .select(`
             interaction_type,
             variant:news_variants (
-                event:news_events (
+                event:neutral_news (
                     category
                 )
             )
@@ -143,7 +143,7 @@ export async function getCategoryLeaningMatrix(sessionId: string | undefined): P
             interaction_type,
             variant:news_variants (
                 policy_type,
-                event:news_events (
+                event:neutral_news (
                     category
                 )
             )

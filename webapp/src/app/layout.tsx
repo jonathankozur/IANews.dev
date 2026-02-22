@@ -45,7 +45,7 @@ export default async function RootLayout({
       <body className="min-h-screen flex flex-col antialiased selection:bg-blue-200 dark:selection:bg-blue-900">
 
         {/* Simple, fast-loading Header */}
-        <header className="sticky top-0 z-50 glass w-full border-b border-gray-200 dark:border-gray-800">
+        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md dark:bg-gray-950/90 w-full border-b border-gray-200 dark:border-gray-800">
           <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
             <h1 className="text-xl font-bold tracking-tight">
               IA<span className="text-blue-500">News</span><span className="text-gray-400">.dev</span>

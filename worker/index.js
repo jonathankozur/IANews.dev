@@ -1,7 +1,18 @@
 require('dotenv').config();
 const supabase = require('./supabaseClient');
-const aiService = require('./aiService');
-const GNewsProvider = require('./providers/GNewsProvider');
+const RssScraperProvider = require('./providers/RssScraperProvider');
+
+const globalArgs = process.argv.slice(2);
+const useOllama = globalArgs.includes('--ai=ollama') || process.env.AI_PROVIDER === 'ollama';
+
+let aiService;
+if (useOllama) {
+    aiService = require('./ollamaService');
+    console.log(`[🔧 CONFIG] Usando OLLAMA local como motor de IA principal.`);
+} else {
+    aiService = require('./aiService');
+    console.log(`[🔧 CONFIG] Usando GEMINI como motor de IA principal.`);
+}
 
 async function procesarNoticiaCruda(articleData) {
     console.log(`\n======================================`);
@@ -91,7 +102,7 @@ async function fetchAndProcessCycle(provider) {
     const noticiasTendencia = await provider.fetchTrendingNews();
 
     if (noticiasTendencia.length === 0) {
-        console.log("No se devolvió ninguna noticia válida de GNews.");
+        console.log("No se devolvió ninguna noticia válida del Scraper RSS.");
         return 0;
     }
 
@@ -113,9 +124,9 @@ async function startWorker() {
     const args = process.argv.slice(2);
     const isContinuous = args.includes('--mode=continuous');
 
-    console.log(`Iniciando News Aggregator Worker con API Real... (Modo: ${isContinuous ? 'CONTINUO' : 'ÚNICO'})`);
+    console.log(`Iniciando News Aggregator Worker con RSS Scraper... (Modo: ${isContinuous ? 'CONTINUO' : 'ÚNICO'})`);
 
-    const provider = new GNewsProvider(process.env.GNEWS_API_KEY);
+    const provider = new RssScraperProvider();
 
     if (isContinuous) {
         console.log("♾️ El worker correrá indefinidamente. Presiona Ctrl+C para detenerlo.");
@@ -123,8 +134,8 @@ async function startWorker() {
             console.log("\n📡 --- Iniciando nuevo ciclo de escaneo ---");
             const procesadas = await fetchAndProcessCycle(provider);
             console.log(`\n🛑 Ciclo finalizado. Se procesaron ${procesadas} noticias nuevas.`);
-            console.log("⏳ Durmiendo 5 minutos antes de buscar más novedades...");
-            await wait(5 * 60 * 1000); // Wait 5 minutes between full top-headlines scans
+            console.log("⏳ Durmiendo 30 minutos antes de buscar más novedades en los RSS...");
+            await wait(30 * 60 * 1000); // RSS don't update as fast, 30 min is safer
         }
     } else {
         console.log("\n📡 --- Iniciando escaneo único ---");

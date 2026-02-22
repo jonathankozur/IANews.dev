@@ -22,6 +22,9 @@ interface NewsEvent {
     objective_summary: string;
     source_name?: string;
     source_url?: string;
+    image_url_original?: string;
+    image_url_ai?: string;
+    image_url_stock?: string;
     published_at: string;
     variants: NewsVariant[];
 }
@@ -113,12 +116,31 @@ export default function NewsCard({ event, preferredLeaning, isWildcard, sessionI
 
     if (!activeVariant) return null; // Fallback por si la BD no está completa aun
 
+    const isValidImage = (url: string | undefined | null) => url && !['NO_IMAGE', 'ERROR', 'ERROR_UPLOADING'].includes(url);
+
+    let displayImage = null;
+    if (isValidImage(event.image_url_original)) displayImage = event.image_url_original;
+    else if (isValidImage(event.image_url_stock)) displayImage = event.image_url_stock;
+    else if (isValidImage(event.image_url_ai)) displayImage = event.image_url_ai;
+
     return (
         <article className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden mb-8 transition-shadow hover:shadow-md relative">
 
             {/* Wildcard Indicator */}
             {isWildcard && (
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-indigo-500" title="Ruptura de Cámara de Eco" />
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-indigo-500 z-10" title="Ruptura de Cámara de Eco" />
+            )}
+
+            {/* News Image Display */}
+            {displayImage && (
+                <div className="w-full h-48 sm:h-64 overflow-hidden relative cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+                    <img
+                        src={displayImage}
+                        alt={event.title}
+                        className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
+                        loading="lazy"
+                    />
+                </div>
             )}
 
             {/* Dev Mode Action (Hidden in Production) */}
@@ -200,14 +222,7 @@ export default function NewsCard({ event, preferredLeaning, isWildcard, sessionI
             {isExpanded && (
                 <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
 
-                    {event.source_url && (
-                        <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
-                            <a href={event.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-1 transition-colors">
-                                {dict.card.readMore} ({event.source_name})
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                            </a>
-                        </div>
-                    )}
+                    {/* Removed Source URL Block */}
 
                     {/* Selector de Perspectiva (Oculto por defecto para el usuario final, visible en Dev Mode) */}
                     {devMode && (
@@ -234,7 +249,14 @@ export default function NewsCard({ event, preferredLeaning, isWildcard, sessionI
                             ))}
                         </div>
 
-                        {/* Componente de Comentarios */}
+                        {event.source_url && (
+                            <div className="pt-6 mt-6 border-t border-gray-100 dark:border-gray-800">
+                                <a href={event.source_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-1 transition-colors">
+                                    {dict.card.readMoreOriginal || 'Leer más en la fuente original'} ({event.source_name})
+                                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                </a>
+                            </div>
+                        )}
                         <CommentSection variantId={activeVariant.id} sessionId={sessionId} dict={dict} />
                     </div>
                 </div>

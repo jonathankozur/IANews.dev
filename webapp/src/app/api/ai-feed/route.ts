@@ -4,14 +4,16 @@ import { supabase } from '@/lib/supabase';
 export async function GET(request: Request) {
     // Obtenemos de la base de datos las últimas 15 noticias, incluyendo todas sus posturas.
     const { data: newsEvents, error } = await supabase
-        .from('news_events')
+        .from('neutral_news')
         .select(`
             title,
             objective_summary,
             category,
-            source_url,
-            source_name,
-            published_at,
+            raw_article:raw_articles (
+                source_url,
+                source_name
+            ),
+            published_at:created_at,
             variants:news_variants (
                 policy_type,
                 title,
@@ -19,7 +21,7 @@ export async function GET(request: Request) {
                 sentiment_score
             )
         `)
-        .order('published_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(15);
 
     if (error || !newsEvents) {
@@ -35,8 +37,18 @@ export async function GET(request: Request) {
         markdown += `## ${event.title}\n`;
         markdown += `**Category:** ${event.category || 'General'} | **Date:** ${new Date(event.published_at).toISOString().split('T')[0]}\n`;
 
-        if (event.source_url) {
-            markdown += `**Source Reference:** [${event.source_name || 'Link'}](${event.source_url})\n`;
+        let sourceUrl = '';
+        let sourceName = '';
+        if (Array.isArray(event.raw_article)) {
+            sourceUrl = event.raw_article[0]?.source_url;
+            sourceName = event.raw_article[0]?.source_name;
+        } else {
+            sourceUrl = (event.raw_article as any)?.source_url;
+            sourceName = (event.raw_article as any)?.source_name;
+        }
+
+        if (sourceUrl) {
+            markdown += `**Source Reference:** [${sourceName || 'Link'}](${sourceUrl})\n`;
         }
 
         markdown += `\n### Objective Facts\n`;

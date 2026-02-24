@@ -6,7 +6,6 @@ const PROD_URL = 'https://neutra-ashy.vercel.app';
 function buildTweetText({ originalTitle, neutralTitle, biasScore, biasDirection, sourceName, slug }) {
     const url = `${PROD_URL}/auditoria/${slug}`;
 
-    // Truncate titles if needed to fit in 280 chars
     const maxOrigLen = 80;
     const maxNeutLen = 80;
     const origTrunc = originalTitle.length > maxOrigLen
@@ -19,9 +18,34 @@ function buildTweetText({ originalTitle, neutralTitle, biasScore, biasDirection,
     const sourceTag = sourceName ? `(${sourceName})` : '';
     const biasLine = biasScore > 0 ? `\n🔥 Sesgo detectado: ${biasScore}% ${biasDirection}` : '';
 
-    const tweet = `⚖️ MISMO HECHO, DOS ENFOQUES:\n\n🔴 Original ${sourceTag}:\n"${origTrunc}"\n\n✅ Neutra:\n"${neutTrunc}"${biasLine}\n\n👉 ${url}`;
+    return `⚖️ MISMO HECHO, DOS ENFOQUES:\n\n🔴 Original ${sourceTag}:\n"${origTrunc}"\n\n✅ Neutra:\n"${neutTrunc}"${biasLine}\n\n👉 ${url}`;
+}
 
-    return tweet;
+// Shared scraper instance (keeps session alive between cycles)
+let scraperInstance = null;
+
+async function getScraper() {
+    const { Scraper } = require('agent-twitter-client');
+
+    const { TWITTER_USERNAME, TWITTER_PASSWORD, TWITTER_EMAIL } = process.env;
+
+    if (!TWITTER_USERNAME || !TWITTER_PASSWORD) {
+        throw new Error('Faltan TWITTER_USERNAME o TWITTER_PASSWORD en el .env');
+    }
+
+    if (!scraperInstance) {
+        console.log(`[🐦 Twitter] Iniciando sesión como @${TWITTER_USERNAME}...`);
+        scraperInstance = new Scraper();
+        await scraperInstance.login(TWITTER_USERNAME, TWITTER_PASSWORD, TWITTER_EMAIL);
+        const loggedIn = await scraperInstance.isLoggedIn();
+        if (!loggedIn) {
+            scraperInstance = null;
+            throw new Error('Login en Twitter fallido. Verificá las credenciales.');
+        }
+        console.log(`[✅ Twitter] Sesión iniciada correctamente.`);
+    }
+
+    return scraperInstance;
 }
 
 module.exports = {
@@ -32,44 +56,19 @@ module.exports = {
         console.log(`\n======================================`);
         console.log(`[🐦 Tarea: Twitter] Buscando noticias listas para publicar...`);
 
-        // Load Twitter credentials from env
-        const {
-            TWITTER_API_KEY,
-            TWITTER_API_SECRET,
-            TWITTER_ACCESS_TOKEN,
-            TWITTER_ACCESS_SECRET,
-        } = process.env;
-
-        if (!TWITTER_API_KEY || !TWITTER_API_SECRET || !TWITTER_ACCESS_TOKEN || !TWITTER_ACCESS_SECRET) {
-            console.warn(`[⚠️ Twitter] Credenciales incompletas. Verifica TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET en el .env`);
-            return;
-        }
-
-        // Lazy-load the Twitter client (only if credentials are present)
-        const { TwitterApi } = require('twitter-api-v2');
-        const client = new TwitterApi({
-            appKey: TWITTER_API_KEY,
-            appSecret: TWITTER_API_SECRET,
-            accessToken: TWITTER_ACCESS_TOKEN,
-            accessSecret: TWITTER_ACCESS_SECRET,
-        });
-        const rwClient = client.readWrite;
-
         // --- COMPLETENESS CHECK ---
         // A news item is "complete" if:
-        //   1. neutral_news.process_status = 'PUBLISHED' (generator finished)
-        //   2. At least one news_variant exists for this neutral_news
-        //   3. tweeted_at IS NULL (not yet tweeted)
+        //   1. process_status = 'PUBLISHED'
+        //   2. Has at least 1 news_variant
+        //   3. tweeted_at IS NULL
         const { data: candidates, error: fetchError } = await supabase
             .from('neutral_news')
             .select(`
                 id,
                 slug,
                 title,
-                objective_summary,
                 original_bias_score,
                 original_bias_direction,
-                raw_article_id,
                 raw_articles!inner (
                     title,
                     source_name
@@ -92,23 +91,16 @@ module.exports = {
 
         const news = candidates[0];
 
-        // COMPLETENESS CHECK: Verify that news_variants exists for this item
+        // Verify variants exist (second completeness gate)
         const { count: variantCount, error: variantError } = await supabase
             .from('news_variants')
             .select('id', { count: 'exact', head: true })
             .eq('neutral_news_id', news.id);
 
-        if (variantError) {
-            console.error(`[X Twitter] Error verificando variantes: ${variantError.message}`);
+        if (variantError || !variantCount || variantCount === 0) {
+            console.warn(`[⚠️ Twitter] Noticia ${news.id} sin variantes generadas todavía. Saltando.`);
             return;
         }
-
-        if (!variantCount || variantCount === 0) {
-            console.warn(`[⚠️ Twitter] Noticia ${news.id} marcada como PUBLISHED pero sin variantes generadas. Saltando.`);
-            return;
-        }
-
-        console.log(`[📤 Twitter] Publicando: "${news.title.substring(0, 50)}..."`);
 
         const tweetText = buildTweetText({
             originalTitle: news.raw_articles.title,
@@ -119,13 +111,15 @@ module.exports = {
             slug: news.slug,
         });
 
-        console.log(`\n--- Tweet Preview ---\n${tweetText}\n--- (${tweetText.length} chars) ---\n`);
+        console.log(`[📤 Twitter] Publicando noticia: "${news.title.substring(0, 50)}..."`);
+        console.log(`\n--- Tweet Preview (${tweetText.length} chars) ---\n${tweetText}\n---\n`);
 
         try {
-            const { data: tweet } = await rwClient.v2.tweet(tweetText);
-            console.log(`[✅ Twitter] Tweet publicado! ID: ${tweet.id}`);
+            const scraper = await getScraper();
+            await scraper.sendTweet(tweetText);
+            console.log(`[✅ Twitter] Tweet publicado exitosamente!`);
 
-            // Mark as tweeted in DB
+            // Mark as tweeted
             const { error: updateError } = await supabase
                 .from('neutral_news')
                 .update({ tweeted_at: new Date().toISOString() })
@@ -134,10 +128,12 @@ module.exports = {
             if (updateError) {
                 console.error(`[X Twitter] Error actualizando tweeted_at: ${updateError.message}`);
             } else {
-                console.log(`[✔] tweeted_at actualizado para noticia ${news.id.substring(0, 8)}`);
+                console.log(`[✔] tweeted_at guardado para noticia ${news.id.substring(0, 8)}`);
             }
 
         } catch (tweetError) {
+            // Reset session on error so it re-logs on next cycle
+            scraperInstance = null;
             console.error(`[X Twitter] Error publicando tweet:`, tweetError.message || tweetError);
         }
     }

@@ -75,6 +75,11 @@
       "delayMs": 2000,
       "isRunning": true,
       "useOllama": true
+    },
+    "twitter-1": {
+      "type": "twitter",
+      "delayMs": 60000,
+      "isRunning": false
     }
   }
 }

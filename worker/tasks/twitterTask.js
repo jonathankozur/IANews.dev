@@ -1,6 +1,130 @@
+const path = require('path');
+const fs = require('fs');
+
+const SESSION_FILE = path.join(__dirname, '..', '.twitter_session.json');
+
+/**
+ * Load cookies from the .twitter_session.json file exported by Cookie-Editor.
+ * Returns the ct0 value (CSRF token) and a full Cookie header string.
+ */
+function loadSession() {
+    if (!fs.existsSync(SESSION_FILE)) {
+        throw new Error(`No se encontró ${SESSION_FILE}. Exportá las cookies de x.com con Cookie-Editor y guardá el JSON ahí.`);
+    }
+
+    const cookies = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf-8'));
+
+    // Build full Cookie header like a real browser would send
+    const cookieHeader = cookies
+        .map(c => `${c.name}=${c.value}`)
+        .join('; ');
+
+    // Extract ct0 for CSRF token header
+    const ct0Cookie = cookies.find(c => c.name === 'ct0');
+    if (!ct0Cookie) {
+        throw new Error('No se encontró la cookie ct0 en el archivo de sesión. Renová las cookies.');
+    }
+
+    return { cookieHeader, ct0: ct0Cookie.value };
+}
+
+/**
+ * Post a tweet using Twitter's internal GraphQL API.
+ * Uses the full exported browser session to bypass bot detection.
+ */
+async function postTweet(text) {
+    const { cookieHeader, ct0 } = loadSession();
+
+    const BEARER_TOKEN = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
+
+    const variables = {
+        tweet_text: text,
+        dark_request: false,
+        media: { media_entities: [], possibly_sensitive: false },
+        semantic_annotation_ids: [],
+    };
+
+    const features = {
+        communities_web_enable_tweet_community_results_fetch: true,
+        c9s_tweet_anatomy_moderator_badge_enabled: true,
+        tweetypie_unmention_optimization_enabled: true,
+        responsive_web_edit_tweet_api_enabled: true,
+        graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
+        view_counts_everywhere_api_enabled: true,
+        longform_notetweets_consumption_enabled: true,
+        responsive_web_twitter_article_tweet_consumption_enabled: false,
+        tweet_awards_web_tipping_enabled: false,
+        longform_notetweets_rich_text_read_enabled: true,
+        longform_notetweets_inline_media_enabled: true,
+        rweb_video_timestamps_enabled: true,
+        responsive_web_graphql_exclude_directive_enabled: true,
+        verified_phone_label_enabled: false,
+        freedom_of_speech_not_reach_fetch_enabled: true,
+        standardized_nudges_misinfo: true,
+        tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
+        responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+        responsive_web_graphql_timeline_navigation_enabled: true,
+        responsive_web_enhance_cards_enabled: false,
+        responsive_web_media_download_video_enabled: false,
+        hidden_profile_loves_inTimeline_enabled: true,
+        highlights_tweets_tab_ui_enabled: true,
+        creator_subscriptions_tweet_preview_api_enabled: true,
+    };
+
+    const body = JSON.stringify({ variables, features });
+
+    const options = {
+        hostname: 'x.com',
+        path: '/i/api/graphql/SoVnbfCycZ7fERGCwpZkYA/CreateTweet',
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${BEARER_TOKEN}`,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+            'Cookie': cookieHeader,
+            'x-csrf-token': ct0,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'x-twitter-active-user': 'yes',
+            'x-twitter-auth-type': 'OAuth2Session',
+            'x-twitter-client-language': 'es',
+            'Accept': '*/*',
+            'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+            'Origin': 'https://x.com',
+            'Referer': 'https://x.com/compose/tweet',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+        },
+    };
+
+    return new Promise((resolve, reject) => {
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.errors) {
+                        reject(new Error(JSON.stringify(parsed.errors)));
+                    } else if (parsed.data?.create_tweet?.tweet_results?.result) {
+                        resolve(parsed.data.create_tweet.tweet_results.result);
+                    } else {
+                        reject(new Error(`Respuesta inesperada: ${data.substring(0, 300)}`));
+                    }
+                } catch (e) {
+                    reject(new Error(`Error parseando respuesta: ${data.substring(0, 300)}`));
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+    });
+}
+
 const supabase = require('../supabaseClient');
 const https = require('https');
-
 const PROD_URL = 'https://neutra-ashy.vercel.app';
 
 // --- ANTI-BAN CONFIG ---

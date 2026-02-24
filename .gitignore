@@ -29,3 +29,7 @@ webapp/out/
 
 # Worker specific
 worker/node_modules
+
+# Twitter session cookies (sensitive - do not commit)
+worker/.twitter_session.json
+worker/.twitter_cookies.json

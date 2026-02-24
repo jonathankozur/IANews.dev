@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
-import Script from "next/script";
+
 import Header from "@/components/Header";
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css";
@@ -21,11 +21,11 @@ export default function RootLayout({
   return (
     <html lang="es" className="antialiased">
       <head>
-        <Script
+        {/* Google AdSense - verificación y monetización */}
+        <script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3506682127236704"
           crossOrigin="anonymous"
-          strategy="afterInteractive"
         />
       </head>
       <body className={inter.className}>

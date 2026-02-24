@@ -27,6 +27,7 @@ async function startWorker() {
     // --ai flag toma prioridad absoluta sobre la variable de entorno
     // Esto permite que el Hub sobreescriba la config del .env por instancia
     const aiFlag = args.find(arg => arg.startsWith('--ai='));
+    const dryRun = args.includes('--dryRun');
     let useOllama;
     if (aiFlag) {
         useOllama = aiFlag === '--ai=ollama';
@@ -63,8 +64,13 @@ async function startWorker() {
     // Determinar opciones a pasar a la tarea
     const options = {
         useOllama: useOllama,
-        instanceId: instanceId || taskName
+        instanceId: instanceId || taskName,
+        dryRun: dryRun
     };
+
+    if (dryRun) {
+        console.log(`[🧪 DRY RUN] Modo prueba activado. No se realizarán acciones reales.`);
+    }
 
     if (isContinuous) {
         // En modo continuo, manejamos excepciones para que no se detenga
@@ -74,9 +80,12 @@ async function startWorker() {
             } catch (err) {
                 console.error(`[❌ Worker ${displayName}] Error global interceptado:`, err.message);
             }
-            // Dormimos el ciclo según lo que se haya calculado
-            console.log(`⏳ [Task Runner] Durmiendo ${sleepMs / 1000}s antes del próximo ciclo de [${displayName}]...`);
-            await new Promise(r => setTimeout(r, sleepMs));
+            // Use getNextDelay() for tasks that want jitter, otherwise use fixed sleepMs
+            const nextSleep = (typeof taskConfig.getNextDelay === 'function' && !delayArg)
+                ? taskConfig.getNextDelay()
+                : sleepMs;
+            console.log(`⏳ [Task Runner] Durmiendo ${Math.round(nextSleep / 1000)}s antes del próximo ciclo de [${displayName}]...`);
+            await new Promise(r => setTimeout(r, nextSleep));
         }
     } else {
         // Ejecución única aborta con código de error si falla

@@ -49,15 +49,15 @@ async function main() {
     console.log('=========================================');
     if (dryRun) console.log('🧪 [DRY RUN] — Solo contará artículos, no actualizará nada.\n');
 
-    // 1. Fetch neutral_news joined with raw_articles where titles match
-    //    (means neutral title was never generated, it's still the original biased title)
+    // 1. Fetch ALL neutral_news joined with raw_articles para detectar todos los casos
+    //    (sin límite — el límite se aplica solo al procesar)
     const { data: records, error } = await supabase
         .from('neutral_news')
         .select(`
             id, title, slug,
             raw_articles!inner ( id, title, raw_text )
         `)
-        .limit(processAll ? 1000 : BATCH_SIZE);
+        .limit(2000); // techo alto para no perder casos
 
     if (error) {
         console.error('❌ Error consultando Supabase:', error.message);

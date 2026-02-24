@@ -51,16 +51,21 @@ module.exports = {
                     continue;
                 }
 
-                // Create base slug from neutral_title (or original if not available)
-                const titleForSlug = analysis.neutral_title || article.title;
-                const slug = generateSlug(titleForSlug) + '-' + Math.random().toString(36).substring(2, 7);
+                // Validación crítica: si no hay neutral_title, rechazar — no usar fallback silencioso
+                if (!analysis.neutral_title || analysis.neutral_title.trim() === '') {
+                    console.warn(`  [⚠️] La IA devolvió análisis sin 'neutral_title'. Marcando como ERROR para reintentar.`);
+                    await supabase.from('raw_articles').update({ process_status: 'ERROR' }).eq('id', article.id);
+                    continue;
+                }
 
-                // Insert into neutral_news — use AI-generated neutral title if available
+                const slug = generateSlug(analysis.neutral_title) + '-' + Math.random().toString(36).substring(2, 7);
+
+                // Insert into neutral_news con el título neutral garantizado
                 const { error: insertError } = await supabase
                     .from('neutral_news')
                     .insert([{
                         raw_article_id: article.id,
-                        title: analysis.neutral_title || article.title,
+                        title: analysis.neutral_title,
                         slug: slug,
                         objective_summary: analysis.objective_summary,
                         original_bias_direction: analysis.original_bias_direction || 'Centro',

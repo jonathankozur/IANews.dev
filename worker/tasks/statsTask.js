@@ -14,20 +14,40 @@ module.exports = {
     execute: async function () {
         console.log('[Stats] 🔍 Iniciando cálculo de estadísticas por medio...');
 
-        // Obtener todos los artículos de neutral_news con los campos necesarios
-        const { data: articles, error } = await supabase
+        // Obtener datos cruzando las tablas raw_articles y news_analysis
+        const { data: rawData, error } = await supabase
             .from('neutral_news')
-            .select('source_name, detected_bias, manipulation_tactics, image_url_original, image_url_stock, created_at');
+            .select(`
+                created_at,
+                raw:raw_articles!inner(source_name, image_url_original, image_url_stock),
+                analysis:news_analysis(detected_bias, manipulation_tactics)
+            `);
 
         if (error) {
             console.error('[Stats] ❌ Error al obtener artículos:', error.message);
+            console.error('[Stats] Detalle:', error);
             return;
         }
 
-        if (!articles || articles.length === 0) {
+        if (!rawData || rawData.length === 0) {
             console.log('[Stats] ⚠️ No hay artículos para analizar.');
             return;
         }
+
+        // Mapear a una estructura plana para que el resto de la lógica siga funcionando igual
+        const articles = rawData.map(item => {
+            const raw = Array.isArray(item.raw) ? item.raw[0] : item.raw;
+            const analysis = Array.isArray(item.analysis) ? item.analysis[0] : item.analysis;
+
+            return {
+                created_at: item.created_at,
+                source_name: raw?.source_name,
+                image_url_original: raw?.image_url_original,
+                image_url_stock: raw?.image_url_stock,
+                detected_bias: analysis?.detected_bias,
+                manipulation_tactics: analysis?.manipulation_tactics
+            };
+        });
 
         console.log(`[Stats] 📰 Analizando ${articles.length} artículos...`);
 

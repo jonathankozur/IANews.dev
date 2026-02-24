@@ -1,6 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { BarChart2, Newspaper, TrendingUp, ImageIcon } from 'lucide-react';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 interface TacticEntry {
     name: string;
@@ -28,10 +31,7 @@ interface MediaStat {
 }
 
 async function getMediaStats(): Promise<MediaStat[]> {
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    console.log('[Medios Page] Fetching stats from Supabase...');
     const { data, error } = await supabase
         .from('media_stats')
         .select('*')
@@ -41,6 +41,7 @@ async function getMediaStats(): Promise<MediaStat[]> {
         console.error('[Medios Page] Error al obtener media_stats:', error.message);
         return [];
     }
+    console.log(`[Medios Page] Found ${data?.length || 0} stats.`);
     return data || [];
 }
 
@@ -120,7 +121,14 @@ export default async function MediosPage() {
                     Radiografía forense de cada medio. Qué tácticas usa, cuán sesgado es su contenido y cómo usa los recursos visuales.
                 </p>
                 {computedAt && (
-                    <p className="text-xs text-slate-400 mt-2">Última actualización: {computedAt}</p>
+                    <div className="flex items-center gap-4 mt-2">
+                        <p className="text-xs text-slate-400" suppressHydrationWarning>
+                            Última actualización: {computedAt}
+                        </p>
+                        <p className="text-[10px] text-slate-300 italic">
+                            (Si no ves cambios, probá Ctrl + F5)
+                        </p>
+                    </div>
                 )}
             </div>
 

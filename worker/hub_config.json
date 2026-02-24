@@ -7,48 +7,48 @@
       "type": "scraper",
       "delayMs": 1800000,
       "useOllama": true,
-      "isRunning": true
+      "isRunning": false
     },
     "neutralizer-1": {
       "type": "neutralizer",
       "delayMs": 120000,
       "useOllama": true,
-      "isRunning": true
+      "isRunning": false
     },
     "generator-1": {
       "type": "generator",
       "delayMs": 60000,
       "useOllama": true,
-      "isRunning": true
+      "isRunning": false
     },
     "image_original-1": {
       "type": "image_original",
       "delayMs": 60000,
       "useOllama": false,
-      "isRunning": true
+      "isRunning": false
     },
     "image_ai-1": {
       "type": "image_ai",
       "delayMs": 30000,
       "useOllama": false,
-      "isRunning": true
+      "isRunning": false
     },
     "image_stock-1": {
       "type": "image_stock",
       "delayMs": 60000,
       "useOllama": false,
-      "isRunning": true
+      "isRunning": false
     },
     "analyzer-1": {
       "type": "analyzer",
       "delayMs": 15000,
       "useOllama": true,
-      "isRunning": true
+      "isRunning": false
     },
     "watchdog-1": {
       "type": "watchdog",
       "delayMs": 60000,
-      "isRunning": true
+      "isRunning": false
     },
     "analyzer-2": {
       "type": "analyzer",
@@ -79,13 +79,18 @@
     "twitter-1": {
       "type": "twitter",
       "delayMs": 3600000,
-      "isRunning": true
+      "isRunning": false
     },
     "processor-2": {
       "type": "processor",
       "delayMs": 2000,
-      "isRunning": true,
+      "isRunning": false,
       "useOllama": false
+    },
+    "stats-1": {
+      "type": "stats",
+      "delayMs": 86400000,
+      "isRunning": true
     }
   }
 }

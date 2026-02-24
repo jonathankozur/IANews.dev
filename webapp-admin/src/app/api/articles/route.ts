@@ -12,17 +12,40 @@ export async function GET(req: NextRequest) {
     const supabase = getSupabaseAdmin();
     let query = supabase
         .from('neutral_news')
-        .select('id, slug, title_neutral, title_original, source_name, detected_bias, created_at', { count: 'exact' })
+        .select(`
+            id, 
+            slug, 
+            title, 
+            created_at,
+            raw:raw_articles!inner(source_name, title),
+            analysis:news_analysis(detected_bias)
+        `, { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
     if (search) {
-        query = query.or(`title_neutral.ilike.%${search}%,title_original.ilike.%${search}%,source_name.ilike.%${search}%`);
+        // En Supabase, para buscar en tablas relacionadas se usa el nombre de la tabla
+        query = query.or(`title.ilike.%${search}%,raw_articles.source_name.ilike.%${search}%,raw_articles.title.ilike.%${search}%`);
     }
 
     const { data, error, count } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ data, count });
+    if (error) {
+        console.error("Admin API Error:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Mapear a estructura plana para el frontend
+    const mappedData = data.map((item: any) => ({
+        id: item.id,
+        slug: item.slug,
+        title_neutral: item.title,
+        title_original: item.raw?.title,
+        source_name: item.raw?.source_name,
+        detected_bias: item.analysis?.[0]?.detected_bias || 'Sin analizar',
+        created_at: item.created_at
+    }));
+
+    return NextResponse.json({ data: mappedData, count });
 }
 
 // DELETE /api/articles?id=...

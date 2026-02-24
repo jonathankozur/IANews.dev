@@ -14,7 +14,8 @@ const WORKER_TYPES = [
   { id: 'image_ai', label: 'Image AI 🤖' },
   { id: 'image_stock', label: 'Image Stock 📸' },
   { id: 'watchdog', label: 'Watchdog 🐕' },
-  { id: 'twitter', label: 'Twitter 🐦' }
+  { id: 'twitter', label: 'Twitter 🐦' },
+  { id: 'stats', label: 'Statistics 📊' }
 ];
 
 function App() {

@@ -14,7 +14,7 @@
     "@google/generative-ai": "^0.24.1",
     "@mozilla/readability": "^0.6.0",
     "@supabase/supabase-js": "^2.97.0",
-    "agent-twitter-client": "^0.0.18",
+    "@the-convocation/twitter-scraper": "^0.22.1",
     "axios": "^1.13.5",
     "cheerio": "^1.2.0",
     "cors": "^2.8.6",

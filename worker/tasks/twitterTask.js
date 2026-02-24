@@ -1,95 +1,167 @@
 const supabase = require('../supabaseClient');
+const https = require('https');
 
 const PROD_URL = 'https://neutra-ashy.vercel.app';
 
 // --- ANTI-BAN CONFIG ---
-const MIN_DELAY_MS = 45 * 60 * 1000;   // 45 min minimum
-const MAX_DELAY_MS = 90 * 60 * 1000;   // 90 min maximum
-const QUIET_HOUR_START = 7;             // 7am Argentina (UTC-3)
-const QUIET_HOUR_END = 23;             // 11pm Argentina
+const MIN_DELAY_MS = 45 * 60 * 1000;
+const MAX_DELAY_MS = 90 * 60 * 1000;
+const QUIET_HOUR_START = 7;
+const QUIET_HOUR_END = 23;
 const MAX_DAILY_TWEETS = 12;
 
-// Rotated tweet formats for variety
 const TWEET_TEMPLATES = [
-    ({ orig, origTrunc, neutTrunc, sourceTag, biasLine, url }) =>
-        `⚖️ MISMO HECHO, DOS ENFOQUES:\n\n🔴 Original ${sourceTag}:\n"${origTrunc}"\n\n✅ Neutra:\n"${neutTrunc}"${biasLine}\n\n👉 ${url}`,
+    ({ origTrunc, neutTrunc, sourceTag, biasLine, url }) =>
+        `⚖️ DOS VERSIONES:\n\n🔴 ${sourceTag}:\n"${origTrunc}"\n\n✅ Neutra:\n"${neutTrunc}"${biasLine}\n\n👉 ${url}`,
 
-    ({ orig, origTrunc, neutTrunc, sourceTag, biasLine, url }) =>
-        `🧐 ¿Titular objetivo o manipulado?\n\n📰 ${sourceTag} publica:\n"${origTrunc}"\n\n🤖 La IA lo reformula:\n"${neutTrunc}"${biasLine}\n\n🔎 ${url}`,
+    ({ origTrunc, neutTrunc, sourceTag, biasLine, url }) =>
+        `🧐 ¿Manipulado o neutral?\n\n📰 ${sourceTag}:\n"${origTrunc}"\n\n🤖 IA:\n"${neutTrunc}"${biasLine}\n\n🔎 ${url}`,
 
-    ({ orig, origTrunc, neutTrunc, sourceTag, biasLine, url }) =>
-        `🔍 Auditoría Periodística:\n\n❌ Con sesgo ${sourceTag}:\n"${origTrunc}"\n\n✅ Sin sesgo:\n"${neutTrunc}"${biasLine}\n\n↗️ ${url}`,
+    ({ origTrunc, neutTrunc, sourceTag, biasLine, url }) =>
+        `🔍 Auditoría:\n\n❌ ${sourceTag}:\n"${origTrunc}"\n\n✅:\n"${neutTrunc}"${biasLine}\n\n↗️ ${url}`,
 ];
+
+const TWITTER_URL_LENGTH = 23; // Twitter shortens all URLs to t.co (~23 chars)
+const TWITTER_MAX_CHARS = 280;
 
 function buildTweetText({ originalTitle, neutralTitle, biasScore, biasDirection, sourceName, slug }) {
     const url = `${PROD_URL}/auditoria/${slug}`;
-    const maxLen = 80;
-    const origTrunc = originalTitle.length > maxLen ? originalTitle.substring(0, maxLen - 1) + '…' : originalTitle;
-    const neutTrunc = neutralTitle.length > maxLen ? neutralTitle.substring(0, maxLen - 1) + '…' : neutralTitle;
     const sourceTag = sourceName ? `(${sourceName})` : '';
     const biasLine = biasScore > 0 ? `\n🔥 Sesgo: ${biasScore}% ${biasDirection}` : '';
 
-    // Pick a random template
+    // Measure template overhead with empty titles to calculate available space
     const template = TWEET_TEMPLATES[Math.floor(Math.random() * TWEET_TEMPLATES.length)];
+    const emptyTweet = template({ origTrunc: '', neutTrunc: '', sourceTag, biasLine, url: 'x'.repeat(TWITTER_URL_LENGTH) });
+    const overhead = emptyTweet.length;
+
+    // Split remaining chars equally between the two titles
+    const available = Math.floor((TWITTER_MAX_CHARS - overhead) / 2) - 2; // -2 for safety margin
+    const maxLen = Math.max(20, available); // minimum 20 chars
+
+    const origTrunc = originalTitle.length > maxLen ? originalTitle.substring(0, maxLen - 1) + '…' : originalTitle;
+    const neutTrunc = neutralTitle.length > maxLen ? neutralTitle.substring(0, maxLen - 1) + '…' : neutralTitle;
     return template({ origTrunc, neutTrunc, sourceTag, biasLine, url });
 }
 
 function getArgentineHour() {
-    const now = new Date();
-    // UTC-3 for Argentina
-    const arHour = (now.getUTCHours() - 3 + 24) % 24;
-    return arHour;
+    return (new Date().getUTCHours() - 3 + 24) % 24;
 }
 
 function isQuietHours() {
-    const hour = getArgentineHour();
-    return hour < QUIET_HOUR_START || hour >= QUIET_HOUR_END;
+    const h = getArgentineHour();
+    return h < QUIET_HOUR_START || h >= QUIET_HOUR_END;
 }
 
 async function getTodayTweetCount() {
     const todayStart = new Date();
-    todayStart.setUTCHours(todayStart.getUTCHours() - 3); // AR offset
-    todayStart.setHours(0, 0, 0, 0);
-
+    todayStart.setUTCHours(0, 0, 0, 0);
     const { count } = await supabase
         .from('neutral_news')
         .select('id', { count: 'exact', head: true })
         .not('tweeted_at', 'is', null)
         .gte('tweeted_at', todayStart.toISOString());
-
     return count || 0;
 }
 
-// Shared scraper session instance
-let scraperInstance = null;
+/**
+ * Post a tweet using Twitter's internal GraphQL API.
+ * This uses the same endpoint the Twitter web app calls — no official API key needed.
+ * Authentication is via browser cookies (auth_token + ct0 as CSRF token).
+ */
+async function postTweet(text) {
+    const { TWITTER_AUTH_TOKEN, TWITTER_CT0 } = process.env;
 
-async function getScraper() {
-    const { Scraper } = require('agent-twitter-client');
-    const { TWITTER_USERNAME, TWITTER_PASSWORD, TWITTER_EMAIL } = process.env;
-
-    if (!TWITTER_USERNAME || !TWITTER_PASSWORD) {
-        throw new Error('Faltan TWITTER_USERNAME o TWITTER_PASSWORD en el .env');
+    if (!TWITTER_AUTH_TOKEN || !TWITTER_CT0) {
+        throw new Error('Faltan TWITTER_AUTH_TOKEN o TWITTER_CT0 en el .env.');
     }
 
-    if (!scraperInstance) {
-        console.log(`[🐦 Twitter] Iniciando sesión como @${TWITTER_USERNAME}...`);
-        scraperInstance = new Scraper();
-        await scraperInstance.login(TWITTER_USERNAME, TWITTER_PASSWORD, TWITTER_EMAIL);
-        const loggedIn = await scraperInstance.isLoggedIn();
-        if (!loggedIn) {
-            scraperInstance = null;
-            throw new Error('Login en Twitter fallido. Verificá las credenciales.');
-        }
-        console.log(`[✅ Twitter] Sesión iniciada correctamente.`);
-    }
+    const BEARER_TOKEN = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
 
-    return scraperInstance;
+    const variables = {
+        tweet_text: text,
+        dark_request: false,
+        media: { media_entities: [], possibly_sensitive: false },
+        semantic_annotation_ids: [],
+    };
+
+    const features = {
+        communities_web_enable_tweet_community_results_fetch: true,
+        c9s_tweet_anatomy_moderator_badge_enabled: true,
+        tweetypie_unmention_optimization_enabled: true,
+        responsive_web_edit_tweet_api_enabled: true,
+        graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
+        view_counts_everywhere_api_enabled: true,
+        longform_notetweets_consumption_enabled: true,
+        responsive_web_twitter_article_tweet_consumption_enabled: false,
+        tweet_awards_web_tipping_enabled: false,
+        longform_notetweets_rich_text_read_enabled: true,
+        longform_notetweets_inline_media_enabled: true,
+        rweb_video_timestamps_enabled: true,
+        responsive_web_graphql_exclude_directive_enabled: true,
+        verified_phone_label_enabled: false,
+        freedom_of_speech_not_reach_fetch_enabled: true,
+        standardized_nudges_misinfo: true,
+        tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
+        responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+        responsive_web_graphql_timeline_navigation_enabled: true,
+        responsive_web_enhance_cards_enabled: false,
+        responsive_web_media_download_video_enabled: false,
+        hidden_profile_loves_inTimeline_enabled: true,
+        highlights_tweets_tab_ui_enabled: true,
+        creator_subscriptions_tweet_preview_api_enabled: true,
+    };
+
+    const body = JSON.stringify({ variables, features });
+
+    const cookieHeader = `auth_token=${TWITTER_AUTH_TOKEN}; ct0=${TWITTER_CT0}`;
+
+    const options = {
+        hostname: 'x.com',
+        path: '/i/api/graphql/SoVnbfCycZ7fERGCwpZkYA/CreateTweet',
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${BEARER_TOKEN}`,
+            'Content-Type': 'application/json',
+            'Cookie': cookieHeader,
+            'x-csrf-token': TWITTER_CT0,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'x-twitter-active-user': 'yes',
+            'x-twitter-auth-type': 'OAuth2Session',
+            'x-twitter-client-language': 'es',
+            'Origin': 'https://x.com',
+            'Referer': 'https://x.com/compose/tweet',
+        },
+    };
+
+    return new Promise((resolve, reject) => {
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.errors) {
+                        reject(new Error(JSON.stringify(parsed.errors)));
+                    } else if (parsed.data?.create_tweet?.tweet_results?.result) {
+                        resolve(parsed.data.create_tweet.tweet_results.result);
+                    } else {
+                        reject(new Error(`Respuesta inesperada: ${data.substring(0, 200)}`));
+                    }
+                } catch (e) {
+                    reject(new Error(`Error parseando respuesta: ${data.substring(0, 200)}`));
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+    });
 }
 
 module.exports = {
-    delayMs: MIN_DELAY_MS, // Base — randomized via getNextDelay()
+    delayMs: MIN_DELAY_MS,
 
-    // Runner calls this to get the NEXT sleep time (with jitter)
     getNextDelay: function () {
         const jitter = Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS));
         return MIN_DELAY_MS + jitter;
@@ -99,23 +171,18 @@ module.exports = {
         console.log(`\n======================================`);
         console.log(`[🐦 Tarea: Twitter] Verificando condiciones...${dryRun ? ' [DRY RUN]' : ''}`);
 
-        // 1. Check quiet hours
         if (isQuietHours()) {
-            const hour = getArgentineHour();
-            console.log(`[😴 Twitter] Son las ${hour}hs en Argentina. Fuera del horario de publicación (${QUIET_HOUR_START}hs-${QUIET_HOUR_END}hs). Saltando.`);
+            console.log(`[😴 Twitter] Son las ${getArgentineHour()}hs en Argentina. Fuera del horario (${QUIET_HOUR_START}hs-${QUIET_HOUR_END}hs). Saltando.`);
             return;
         }
 
-        // 2. Check daily cap
         const todayCount = await getTodayTweetCount();
         if (todayCount >= MAX_DAILY_TWEETS) {
-            console.log(`[🚫 Twitter] Límite diario alcanzado (${todayCount}/${MAX_DAILY_TWEETS} tweets). Saltando.`);
+            console.log(`[🚫 Twitter] Límite diario alcanzado (${todayCount}/${MAX_DAILY_TWEETS}). Saltando.`);
             return;
         }
-
         console.log(`[📊 Twitter] Tweets hoy: ${todayCount}/${MAX_DAILY_TWEETS}`);
 
-        // 3. Find next complete article to post
         const { data: candidates, error: fetchError } = await supabase
             .from('neutral_news')
             .select(`
@@ -133,13 +200,12 @@ module.exports = {
         }
 
         if (!candidates || candidates.length === 0) {
-            console.log(`[!] No hay noticias completas pendientes de publicar.`);
+            console.log(`[!] No hay noticias pendientes de publicar.`);
             return;
         }
 
         const news = candidates[0];
 
-        // Verify variants exist
         const { count: variantCount } = await supabase
             .from('news_variants')
             .select('id', { count: 'exact', head: true })
@@ -164,20 +230,18 @@ module.exports = {
         console.log(`---\n`);
 
         if (dryRun) {
-            console.log(`[🧪 DRY RUN] Tweet NO publicado. Remové --dryRun para publicar de verdad.`);
+            console.log(`[🧪 DRY RUN] Tweet NO publicado.`);
             return;
         }
 
-        // 4. Human-like pre-tweet pause (5-30 seconds)
         const pauseSec = 5 + Math.floor(Math.random() * 25);
-        console.log(`[⏸️ Twitter] Pausa humana de ${pauseSec}s antes de publicar...`);
+        console.log(`[⏸️ Twitter] Pausa de ${pauseSec}s antes de publicar...`);
         await new Promise(r => setTimeout(r, pauseSec * 1000));
 
-        // 5. Post tweet
         try {
-            const scraper = await getScraper();
-            await scraper.sendTweet(tweetText);
-            console.log(`[✅ Twitter] Tweet publicado exitosamente!`);
+            const result = await postTweet(tweetText);
+            const tweetId = result?.rest_id || result?.id;
+            console.log(`[✅ Twitter] ¡Tweet publicado! ID: ${tweetId}`);
 
             await supabase
                 .from('neutral_news')
@@ -185,10 +249,8 @@ module.exports = {
                 .eq('id', news.id);
 
             console.log(`[✔] tweeted_at guardado para noticia ${news.id.substring(0, 8)}`);
-
-        } catch (tweetError) {
-            scraperInstance = null; // Reset session on error
-            console.error(`[X Twitter] Error publicando tweet:`, tweetError.message || tweetError);
+        } catch (err) {
+            console.error(`[X Twitter] Error publicando tweet:`, err.message || err);
         }
     }
 };

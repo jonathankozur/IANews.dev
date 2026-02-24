@@ -116,17 +116,21 @@ module.exports = {
         }
         console.log(`[📊 Twitter] Tweets hoy: ${todayCount}/${MAX_DAILY_TWEETS}`);
 
-        // 3. Find next complete, untweeted article
-        //    "Complete" = process_status PUBLISHED + has news_variants + tweeted_at IS NULL
+        // 3. Find the most impactful untweeted article (highest bias score first)
+        //    "Complete" = PUBLISHED + has news_variants + tweeted_at IS NULL + bias >= 15
         const { data: candidates, error: fetchError } = await supabase
             .from('neutral_news')
             .select(`
-                id, slug, title, original_bias_score, original_bias_direction,
-                raw_articles!inner ( title, source_name )
+                id, slug, title, objective_summary,
+                original_bias_score, original_bias_direction,
+                raw_articles!inner ( title, source_name ),
+                news_variants ( language, policy_type, title )
             `)
             .eq('process_status', 'PUBLISHED')
             .is('tweeted_at', null)
-            .order('created_at', { ascending: true })
+            .gte('original_bias_score', 15)
+            .order('original_bias_score', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(1);
 
         if (fetchError) {
@@ -141,25 +145,49 @@ module.exports = {
 
         const news = candidates[0];
 
-        // Completeness gate: verify variants exist
-        const { count: variantCount } = await supabase
-            .from('news_variants')
-            .select('id', { count: 'exact', head: true })
-            .eq('neutral_news_id', news.id);
-
-        if (!variantCount || variantCount === 0) {
-            console.warn(`[⚠️ Twitter] Noticia ${news.id.substring(0, 8)} sin variantes aún. Saltando.`);
+        // Completeness gate + extract Spanish left/right titles for AI tweet
+        const allVariants = news.news_variants || [];
+        if (allVariants.length === 0) {
+            console.warn(`[⚠️ Twitter] Noticia ${news.id.substring(0, 8)} sin variantes. Sesgo: ${news.original_bias_score}%. Saltando.`);
             return;
         }
+        const esVariants = allVariants.filter(v => v.language === 'es');
+        const leftTitle = esVariants.find(v => v.policy_type === 'left')?.title || '';
+        const rightTitle = esVariants.find(v => v.policy_type === 'right')?.title || '';
 
-        const tweetText = buildTweetText({
-            originalTitle: news.raw_articles.title,
-            neutralTitle: news.title,
-            biasScore: news.original_bias_score,
-            biasDirection: news.original_bias_direction,
-            sourceName: news.raw_articles.source_name,
-            slug: news.slug,
-        });
+        console.log(`[🎯] Noticia elegida: sesgo ${news.original_bias_score}% ${news.original_bias_direction} (${news.raw_articles.source_name})`);
+
+        // Try AI-generated viral tweet first, fall back to template
+        let tweetText = null;
+        try {
+            const aiService = require('../aiService');
+            tweetText = await aiService.generarTweetViral({
+                tituloOriginal: news.raw_articles.title,
+                resumen: news.objective_summary || '',
+                izquierda: leftTitle,
+                derecha: rightTitle,
+            });
+            if (tweetText) {
+                // Append the audit URL (AI leaves space for it)
+                const url = `${PROD_URL}/auditoria/${news.slug}`;
+                tweetText = `${tweetText}\n\n${url}`;
+                console.log(`[🤖] Tweet generado por IA.`);
+            }
+        } catch (aiErr) {
+            console.warn(`[⚠️] IA tweet generation failed, usando template: ${aiErr.message}`);
+        }
+
+        // Fallback: use comparison template
+        if (!tweetText) {
+            tweetText = buildTweetText({
+                originalTitle: news.raw_articles.title,
+                neutralTitle: news.title,
+                biasScore: news.original_bias_score,
+                biasDirection: news.original_bias_direction,
+                sourceName: news.raw_articles.source_name,
+                slug: news.slug,
+            });
+        }
 
         console.log(`\n--- ${dryRun ? '🧪 DRY RUN - ' : ''}Tweet Preview (${tweetText.length} chars shown) ---`);
         console.log(tweetText);

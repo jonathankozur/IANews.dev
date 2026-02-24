@@ -55,19 +55,21 @@ async function analizarYExtraerCrudo(textoCrudo, titulo) {
     console.log(`[🤖 IA Service Client] Encolando análisis de sesgo original y extracción de hechos...`);
 
     const prompt = `
-Eres un analista político y lingüístico experto. Tu tarea es analizar el siguiente artículo periodístico y realizar dos acciones específicas:
+Eres un analista político y lingüístico experto. Tu tarea es analizar el siguiente artículo periodístico y realizar TRES acciones:
 
 1. Calcular el Sesgo Original: Determina si el texto está inclinado a la 'Izquierda', 'Derecha', o si es de 'Centro'. Calcula un porcentaje de qué tan fuerte es ese sesgo (0 a 100).
 2. Extraer Hechos: Escribe un resumen completamente frío, neutral e impersonal (máximo 80-100 palabras) usando solo los hechos comprobables, eliminando adjetivos emocionales o de opinión.
+3. Redactar Titular Neutro: Reescribí el titular original eliminando completamente el sesgo. El titular neutro debe describir el hecho sin carga emotiva, adjetivos valorativos ni framing ideológico. Máximo 15 palabras.
 
-Título: "${titulo}"
+Título Original: "${titulo}"
 Texto Original: "${textoCrudo.substring(0, 3000)}"
 
 IMPORTANTE: Responde ÚNICAMENTE con un JSON válido usando esta estructura exacta:
 {
   "original_bias_direction": "Izquierda" | "Derecha" | "Centro",
   "original_bias_score": Número de 0 a 100,
-  "objective_summary": "String con el resumen neutral"
+  "objective_summary": "String con el resumen neutral de 80-100 palabras",
+  "neutral_title": "String con el titular reescrito sin sesgo (máximo 15 palabras)"
 }
 `;
 

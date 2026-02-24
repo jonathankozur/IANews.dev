@@ -51,15 +51,16 @@ module.exports = {
                     continue;
                 }
 
-                // Create base slug, attach a random string to guarantee uniqueness
-                const slug = generateSlug(article.title) + '-' + Math.random().toString(36).substring(2, 7);
+                // Create base slug from neutral_title (or original if not available)
+                const titleForSlug = analysis.neutral_title || article.title;
+                const slug = generateSlug(titleForSlug) + '-' + Math.random().toString(36).substring(2, 7);
 
-                // Insert into neutral_news
+                // Insert into neutral_news — use AI-generated neutral title if available
                 const { error: insertError } = await supabase
                     .from('neutral_news')
                     .insert([{
                         raw_article_id: article.id,
-                        title: article.title,
+                        title: analysis.neutral_title || article.title,
                         slug: slug,
                         objective_summary: analysis.objective_summary,
                         original_bias_direction: analysis.original_bias_direction || 'Centro',

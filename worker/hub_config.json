@@ -78,8 +78,14 @@
     },
     "twitter-1": {
       "type": "twitter",
-      "delayMs": 60000,
-      "isRunning": false
+      "delayMs": 3600000,
+      "isRunning": true
+    },
+    "processor-2": {
+      "type": "processor",
+      "delayMs": 2000,
+      "isRunning": false,
+      "useOllama": false
     }
   }
 }

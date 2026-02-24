@@ -66,9 +66,16 @@ export default function Sidebar() {
                                     </div>
                                 </Link>
                                 {/* Mostrar un anuncio después de ciertos elementos */}
-                                {(idx === 2 || idx === 5) && (
+                                {idx === 2 && (
                                     <div className="py-2">
-                                        <AdBanner />
+                                        {/* TODO: Reemplazar con el Slot ID real de AdSense una vez verificada la cuenta */}
+                                        <AdBanner slot="SLOT_SIDEBAR_TOP" format="rectangle" />
+                                    </div>
+                                )}
+                                {idx === 5 && (
+                                    <div className="py-2">
+                                        {/* TODO: Reemplazar con el Slot ID real de AdSense una vez verificada la cuenta */}
+                                        <AdBanner slot="SLOT_SIDEBAR_MID" format="rectangle" />
                                     </div>
                                 )}
                             </div>

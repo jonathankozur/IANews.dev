@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { Fragment, useEffect, useState, useRef, useCallback } from "react";
 import SplitNewsCard from "@/components/SplitNewsCard";
 import FilterBar from "@/components/FilterBar";
 import Sidebar from "@/components/Sidebar";
+import AdBanner from "@/components/AdBanner";
 
 export default function Home() {
   const [articles, setArticles] = useState<any[]>([]);
@@ -108,8 +109,15 @@ export default function Home() {
             </div>
           ) : (
             <>
-              {articles.map((article: any) => (
-                <SplitNewsCard key={article.id} article={article} />
+              {articles.map((article: any, idx: number) => (
+                <Fragment key={article.id}>
+                  <SplitNewsCard article={article} />
+                  {/* In-feed ad cada 4 artículos */}
+                  {/* TODO: Reemplazar SLOT_IN_FEED con el Slot ID real de AdSense */}
+                  {(idx + 1) % 4 === 0 && (
+                    <AdBanner slot="SLOT_IN_FEED" format="auto" className="my-2" />
+                  )}
+                </Fragment>
               ))}
 
               {/* Intersection Observer Target */}

@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import SplitNewsCard from '@/components/SplitNewsCard';
 import Sidebar from '@/components/Sidebar';
+import AdBanner from '@/components/AdBanner';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -90,11 +91,15 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ sl
                 <Sidebar />
             </div>
 
-            <div className="mt-8 border-t border-slate-200 pt-8 flex justify-center">
-                <Link href="/" className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900 transition px-6 py-3 bg-slate-100 rounded-lg hover:bg-slate-200">
-                    <ChevronLeft className="w-4 h-4 mr-1" />
-                    Volver a Todas las Auditorías
-                </Link>
+            <div className="mt-8 border-t border-slate-200 pt-8">
+                {/* TODO: Reemplazar SLOT_DETAIL_BANNER con el Slot ID real de AdSense */}
+                <AdBanner slot="SLOT_DETAIL_BANNER" format="horizontal" className="mb-8" />
+                <div className="flex justify-center">
+                    <Link href="/" className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900 transition px-6 py-3 bg-slate-100 rounded-lg hover:bg-slate-200">
+                        <ChevronLeft className="w-4 h-4 mr-1" />
+                        Volver a Todas las Auditorías
+                    </Link>
+                </div>
             </div>
         </div>
     );

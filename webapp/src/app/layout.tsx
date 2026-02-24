@@ -6,6 +6,9 @@ import Footer from '@/components/Footer';
 import { cookies, headers } from 'next/headers';
 import { getDictionary } from '@/lib/i18n';
 import { Analytics } from "@vercel/analytics/next";
+import { ThemeProvider } from '@/components/ThemeProvider';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import TrendingTicker from '@/components/TrendingTicker';
 
 // Using Inter as the primary font for maximum legibility (Designer Rule 1)
 const inter = Inter({
@@ -42,32 +45,37 @@ export default async function RootLayout({
 
   return (
     <html lang={userLanguage} className={`${inter.variable}`}>
-      <body className="min-h-screen flex flex-col antialiased selection:bg-blue-200 dark:selection:bg-blue-900">
+      <body className="min-h-screen flex flex-col antialiased selection:bg-blue-200 dark:selection:bg-blue-900 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          {/* Simple, fast-loading Header */}
+          <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md dark:bg-gray-950/90 w-full border-b border-gray-200 dark:border-gray-800">
+            <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+              <h1 className="text-xl font-bold tracking-tight">
+                IA<span className="text-blue-500">News</span><span className="text-gray-400">.dev</span>
+              </h1>
+              <nav className="flex items-center space-x-6">
+                <ul className="flex space-x-6 text-sm font-medium text-gray-600 dark:text-gray-300">
+                  <li><a href="/" className="hover:text-gray-900 dark:hover:text-white transition-colors">{dict.nav.news}</a></li>
+                  <li><a href="/about" className="hover:text-gray-900 dark:hover:text-white transition-colors">{dict.nav.about}</a></li>
+                </ul>
+                <div className="h-6 w-px bg-gray-200 dark:bg-gray-800 mx-2"></div>
+                <ThemeToggle />
+              </nav>
+            </div>
+          </header>
 
-        {/* Simple, fast-loading Header */}
-        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md dark:bg-gray-950/90 w-full border-b border-gray-200 dark:border-gray-800">
-          <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-            <h1 className="text-xl font-bold tracking-tight">
-              IA<span className="text-blue-500">News</span><span className="text-gray-400">.dev</span>
-            </h1>
-            <nav>
-              <ul className="flex space-x-6 text-sm font-medium text-gray-600 dark:text-gray-300">
-                <li><a href="/" className="hover:text-gray-900 dark:hover:text-white transition-colors">{dict.nav.news}</a></li>
-                <li><a href="/about" className="hover:text-gray-900 dark:hover:text-white transition-colors">{dict.nav.about}</a></li>
-              </ul>
-            </nav>
-          </div>
-        </header>
+          <TrendingTicker />
 
-        <main className="flex-grow">
-          {children}
-          {sessionId && <DevDashboard sessionId={sessionId} />}
-        </main>
+          <main className="flex-grow">
+            {children}
+            {sessionId && <DevDashboard sessionId={sessionId} />}
+          </main>
 
-        {/* Dynamic Footer Component */}
-        <Footer locale={userLanguage} />
+          {/* Dynamic Footer Component */}
+          <Footer locale={userLanguage} />
 
-        <Analytics />
+          <Analytics />
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -7,43 +7,43 @@
       "type": "scraper",
       "delayMs": 1800000,
       "useOllama": true,
-      "isRunning": true
+      "isRunning": false
     },
     "neutralizer-1": {
       "type": "neutralizer",
       "delayMs": 120000,
       "useOllama": true,
-      "isRunning": true
+      "isRunning": false
     },
     "generator-1": {
       "type": "generator",
       "delayMs": 60000,
       "useOllama": true,
-      "isRunning": true
+      "isRunning": false
     },
     "image_original-1": {
       "type": "image_original",
       "delayMs": 60000,
       "useOllama": false,
-      "isRunning": true
+      "isRunning": false
     },
     "image_ai-1": {
       "type": "image_ai",
       "delayMs": 30000,
       "useOllama": false,
-      "isRunning": true
+      "isRunning": false
     },
     "image_stock-1": {
       "type": "image_stock",
       "delayMs": 60000,
       "useOllama": false,
-      "isRunning": true
+      "isRunning": false
     },
     "analyzer-1": {
       "type": "analyzer",
       "delayMs": 15000,
       "useOllama": true,
-      "isRunning": true
+      "isRunning": false
     },
     "watchdog-1": {
       "type": "watchdog",
@@ -74,7 +74,7 @@
       "type": "processor",
       "delayMs": 2000,
       "isRunning": true,
-      "useOllama": false
+      "useOllama": true
     }
   }
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
 import Header from "@/components/Header";
+import { Analytics } from "@vercel/analytics/next"
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -32,6 +33,7 @@ export default function RootLayout({
             <Link href="/privacy" className="hover:text-slate-300 transition">Políticas de Privacidad</Link>
           </div>
         </footer>
+        <Analytics />
       </body>
     </html>
   );

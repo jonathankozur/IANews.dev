@@ -21,6 +21,7 @@ export default function Header() {
                     <nav className="flex items-center gap-4 md:gap-6 text-sm font-medium">
                         <div className="hidden md:flex gap-6">
                             <Link href="/" className="text-slate-300 hover:text-white transition">Auditorías</Link>
+                            <Link href="/medios" className="text-slate-300 hover:text-white transition">Medios</Link>
                             <Link href="/about" className="text-slate-300 hover:text-white transition">Acerca del Proyecto</Link>
                         </div>
                         <button

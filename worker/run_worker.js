@@ -11,7 +11,8 @@ const tasks = {
     'image_stock': require('./tasks/imageStockTask'),
     'analyzer': require('./tasks/analyzerTask'),
     'watchdog': require('./tasks/watchdogTask'),
-    'twitter': require('./tasks/twitterTask')
+    'twitter': require('./tasks/twitterTask'),
+    'stats': require('./tasks/statsTask')
 };
 
 async function startWorker() {

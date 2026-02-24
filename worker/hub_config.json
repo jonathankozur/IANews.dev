@@ -13,37 +13,37 @@
       "type": "neutralizer",
       "delayMs": 120000,
       "useOllama": true,
-      "isRunning": false
+      "isRunning": true
     },
     "generator-1": {
       "type": "generator",
       "delayMs": 60000,
       "useOllama": true,
-      "isRunning": false
+      "isRunning": true
     },
     "image_original-1": {
       "type": "image_original",
       "delayMs": 60000,
       "useOllama": false,
-      "isRunning": false
+      "isRunning": true
     },
     "image_ai-1": {
       "type": "image_ai",
       "delayMs": 30000,
       "useOllama": false,
-      "isRunning": false
+      "isRunning": true
     },
     "image_stock-1": {
       "type": "image_stock",
       "delayMs": 60000,
       "useOllama": false,
-      "isRunning": false
+      "isRunning": true
     },
     "analyzer-1": {
       "type": "analyzer",
       "delayMs": 15000,
       "useOllama": true,
-      "isRunning": false
+      "isRunning": true
     },
     "watchdog-1": {
       "type": "watchdog",

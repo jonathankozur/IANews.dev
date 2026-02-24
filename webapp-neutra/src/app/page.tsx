@@ -90,10 +90,6 @@ export default function Home() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 pt-8">
-      <div className="mb-4">
-        <h2 className="text-3xl font-black text-slate-900 tracking-tight">Últimas Auditorías</h2>
-      </div>
-
       <FilterBar onFilterChange={handleFilterChange} />
 
       <div className="flex flex-col lg:flex-row gap-8 items-start">

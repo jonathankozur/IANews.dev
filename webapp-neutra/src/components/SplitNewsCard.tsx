@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, CheckCircle, Search, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Search } from 'lucide-react';
 import BiasGauge from './BiasGauge';
 
 interface FactCheck {
@@ -34,13 +34,36 @@ interface SplitNewsCardProps {
 
 export default function SplitNewsCard({ article, isDetailPage = false }: SplitNewsCardProps) {
     const [isExpanded, setIsExpanded] = useState(isDetailPage);
+    const [gaugeVisible, setGaugeVisible] = useState(isDetailPage); // On detail page, animate immediately
+    const articleRef = useRef<HTMLElement>(null);
 
     const displayImage = article.image_url_original && !article.image_url_original.includes('ERROR') && !article.image_url_original.includes('NO_IMAGE')
         ? article.image_url_original
         : article.image_url_stock && !article.image_url_stock.includes('ERROR') ? article.image_url_stock : null;
 
+    // IntersectionObserver: Trigger gauge animation only once when the card enters view
+    useEffect(() => {
+        if (isDetailPage || !article.detected_bias) return; // Already visible or no gauge to animate
+
+        const el = articleRef.current;
+        if (!el) return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setGaugeVisible(true);
+                    observer.disconnect(); // fire only once
+                }
+            },
+            { threshold: 0.1 } // Trigger when 10% of card is visible
+        );
+
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [isDetailPage, article.detected_bias]);
+
     return (
-        <article className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden mb-12">
+        <article ref={articleRef} className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden mb-12">
             {/* Visual Header */}
             {displayImage && (
                 <div className="w-full h-48 md:h-64 overflow-hidden relative border-b border-slate-200">
@@ -53,6 +76,7 @@ export default function SplitNewsCard({ article, isDetailPage = false }: SplitNe
                         <BiasGauge
                             biasLevel={article.detected_bias}
                             score={Math.min(100, (article.manipulation_tactics?.length || 1) * 20 + 40)}
+                            shouldAnimate={gaugeVisible}
                         />
                     )}
                 </div>
@@ -153,7 +177,7 @@ export default function SplitNewsCard({ article, isDetailPage = false }: SplitNe
                                                 {check.is_false ? <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5" /> : <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5" />}
                                                 Afirmación Original:
                                             </p>
-                                            <p className="text-sm text-slate-600 italic mb-3">"{check.claim}"</p>
+                                            <p className="text-sm text-slate-600 italic mb-3">&ldquo;{check.claim}&rdquo;</p>
 
                                             <p className="text-sm font-bold text-slate-900 mb-1">La Realidad Objetiva:</p>
                                             <p className="text-sm text-slate-700">{check.truth}</p>

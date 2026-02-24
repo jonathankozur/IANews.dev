@@ -31,7 +31,8 @@ let systemConfig = {
         'image_stock-1': { type: 'image_stock', delayMs: 60000, isRunning: false },
         'analyzer-1': { type: 'analyzer', delayMs: 15000, isRunning: false },
         'watchdog-1': { type: 'watchdog', delayMs: 60000, isRunning: false },
-        'twitter-1': { type: 'twitter', delayMs: 900000, isRunning: false }
+        'twitter-1': { type: 'twitter', delayMs: 900000, isRunning: false },
+        'stats-1': { type: 'stats', delayMs: 86400000, isRunning: false }
     },
     globalSettings: {
         aiProvider: 'ollama' // Default AI provider
@@ -180,7 +181,8 @@ app.post('/api/instances', (req, res) => {
         twitter: 900000,
         image_original: 60000,
         image_ai: 30000,
-        image_stock: 60000
+        image_stock: 60000,
+        stats: 86400000
     };
 
     // Find unique ID

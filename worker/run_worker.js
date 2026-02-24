@@ -10,7 +10,8 @@ const tasks = {
     'image_ai': require('./tasks/imageAiTask'),
     'image_stock': require('./tasks/imageStockTask'),
     'analyzer': require('./tasks/analyzerTask'),
-    'watchdog': require('./tasks/watchdogTask')
+    'watchdog': require('./tasks/watchdogTask'),
+    'twitter': require('./tasks/twitterTask')
 };
 
 async function startWorker() {

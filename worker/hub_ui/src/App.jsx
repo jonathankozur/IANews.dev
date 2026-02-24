@@ -13,7 +13,8 @@ const WORKER_TYPES = [
   { id: 'image_original', label: 'Image Original 🖼️' },
   { id: 'image_ai', label: 'Image AI 🤖' },
   { id: 'image_stock', label: 'Image Stock 📸' },
-  { id: 'watchdog', label: 'Watchdog 🐕' }
+  { id: 'watchdog', label: 'Watchdog 🐕' },
+  { id: 'twitter', label: 'Twitter 🐦' }
 ];
 
 function App() {

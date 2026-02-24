@@ -7,7 +7,7 @@
       "type": "scraper",
       "delayMs": 1800000,
       "useOllama": true,
-      "isRunning": false
+      "isRunning": true
     },
     "neutralizer-1": {
       "type": "neutralizer",
@@ -84,7 +84,7 @@
     "processor-2": {
       "type": "processor",
       "delayMs": 2000,
-      "isRunning": false,
+      "isRunning": true,
       "useOllama": false
     }
   }

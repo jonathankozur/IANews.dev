@@ -10,10 +10,9 @@ const fetchClient = axios.create({
 });
 
 class RssScraperProvider {
-    constructor(aiServiceInstance) {
+    constructor() {
         // We will use GNews API to get the links, because Argentine RSS feeds block server IPs vigorously
         this.apiKey = process.env.GNEWS_API_KEY;
-        this.aiService = aiServiceInstance;
     }
 
     async fetchTrendingNews() {
@@ -52,20 +51,14 @@ class RssScraperProvider {
             console.log(`  [📥] Extrayendo contenido (bypassing paywalls): ${article.title.substring(0, 40)}...`);
             const content = await this.extractArticleText(article.source_url);
 
-            if (content && content.length > 250) {
-                const isRelevant = await this.aiService.esNoticiaDePoliticaOEconomiaArgentina(article.title, content);
-
-                if (isRelevant) {
-                    articlesWithContent.push({
-                        title: article.title,
-                        source_name: article.source_name,
-                        source_url: article.source_url,
-                        content: content,
-                        image_url: null
-                    });
-                } else {
-                    console.log(`  [⛔] Descartada por Filtro Temático: ${article.title}`);
-                }
+            if (content && content.text && content.text.length > 250) {
+                articlesWithContent.push({
+                    title: article.title,
+                    source_name: article.source_name,
+                    source_url: article.source_url,
+                    content: content.text,
+                    image_url: content.image
+                });
             } else {
                 console.log(`  [!] Contenido descartado (paywall estricto o muy corto).`);
             }
@@ -83,7 +76,21 @@ class RssScraperProvider {
             const reader = new Readability(doc.window.document);
             const article = reader.parse();
 
-            return article ? article.textContent.trim() : null;
+            let imageUrl = null;
+            const ogImage = doc.window.document.querySelector('meta[property="og:image"]');
+            if (ogImage) {
+                imageUrl = ogImage.getAttribute('content');
+            } else {
+                const imgTag = doc.window.document.querySelector('article img') || doc.window.document.querySelector('img');
+                if (imgTag) {
+                    imageUrl = imgTag.getAttribute('src');
+                }
+            }
+
+            return {
+                text: article ? article.textContent.trim() : null,
+                image: imageUrl
+            };
 
         } catch (error) {
             // Unblockable paywalls or anti-bot JS (Clarin, some La Nacion) will fail here, we just ignore them

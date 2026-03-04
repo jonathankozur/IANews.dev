@@ -9,9 +9,7 @@ module.exports = {
         console.log(`\n======================================`);
         console.log(`[🕷️ Tarea: Scraper] Iniciando extracción de noticias crudas...`);
 
-        // Importamos dinámicamente el servicio de IA según corresponda
-        const aiService = useOllama ? require('../ollamaService') : require('../aiService');
-        const provider = new RssScraperProvider(aiService);
+        const provider = new RssScraperProvider();
 
         const articles = await provider.fetchTrendingNews();
 
@@ -31,7 +29,8 @@ module.exports = {
                     source_url: article.source_url,
                     title: article.title,
                     raw_text: article.content,
-                    process_status: 'PENDING_ANALYSIS'
+                    image_url: article.image_url,
+                    process_status: 'PENDING_RELEVANCE'
                 }]);
 
             if (error) {

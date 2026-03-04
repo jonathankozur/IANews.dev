@@ -1,96 +1,195 @@
 {
-  "globalSettings": {
-    "aiProvider": "ollama"
-  },
   "instances": {
     "scraper-1": {
       "type": "scraper",
       "delayMs": 1800000,
-      "useOllama": true,
       "isRunning": false
     },
-    "neutralizer-1": {
-      "type": "neutralizer",
-      "delayMs": 120000,
-      "useOllama": true,
-      "isRunning": false
-    },
-    "generator-1": {
-      "type": "generator",
-      "delayMs": 60000,
-      "useOllama": true,
-      "isRunning": false
-    },
-    "image_original-1": {
-      "type": "image_original",
-      "delayMs": 60000,
-      "useOllama": false,
-      "isRunning": false
-    },
-    "image_ai-1": {
-      "type": "image_ai",
-      "delayMs": 30000,
-      "useOllama": false,
-      "isRunning": false
-    },
-    "image_stock-1": {
-      "type": "image_stock",
-      "delayMs": 60000,
-      "useOllama": false,
-      "isRunning": false
-    },
-    "analyzer-1": {
-      "type": "analyzer",
-      "delayMs": 15000,
-      "useOllama": true,
+    "orchestrator-1": {
+      "type": "orchestrator",
+      "delayMs": 5000,
       "isRunning": false
     },
     "watchdog-1": {
       "type": "watchdog",
       "delayMs": 60000,
-      "isRunning": false
-    },
-    "analyzer-2": {
-      "type": "analyzer",
-      "delayMs": 15000,
-      "isRunning": false
-    },
-    "generator-2": {
-      "type": "generator",
-      "delayMs": 60000,
-      "isRunning": false
-    },
-    "neutralizer-2": {
-      "type": "neutralizer",
-      "delayMs": 120000,
-      "isRunning": false
-    },
-    "scraper-2": {
-      "type": "scraper",
-      "delayMs": 1800000,
-      "isRunning": false
-    },
-    "processor-1": {
-      "type": "processor",
-      "delayMs": 2000,
-      "isRunning": true,
-      "useOllama": true
+      "isRunning": true
     },
     "twitter-1": {
       "type": "twitter",
-      "delayMs": 3600000,
+      "delayMs": 900000,
       "isRunning": false
     },
-    "processor-2": {
-      "type": "processor",
-      "delayMs": 2000,
-      "isRunning": false,
-      "useOllama": false
+    "twitterAudit-1": {
+      "type": "twitterAudit",
+      "delayMs": 3600000,
+      "isRunning": false
     },
     "stats-1": {
       "type": "stats",
       "delayMs": 86400000,
-      "isRunning": true
+      "isRunning": false
+    },
+    "image_original-1": {
+      "type": "image_original",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "translator-1": {
+      "type": "translator",
+      "delayMs": 30000,
+      "isRunning": false
+    },
+    "twitter_audit-1": {
+      "type": "twitter_audit",
+      "delayMs": 6000,
+      "isRunning": false,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase0_receiver-1": {
+      "type": "phase0_receiver",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase1_submitter-1": {
+      "type": "phase1_submitter",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase1_receiver-1": {
+      "type": "phase1_receiver",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase2_submitter-1": {
+      "type": "phase2_submitter",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase2_receiver-1": {
+      "type": "phase2_receiver",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase_qcb_submitter-1": {
+      "type": "phase_qcb_submitter",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase_qcb_receiver-1": {
+      "type": "phase_qcb_receiver",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase3_submitter-1": {
+      "type": "phase3_submitter",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase3_receiver-1": {
+      "type": "phase3_receiver",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase_qca_receiver-1": {
+      "type": "phase_qca_receiver",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "processor-1": {
+      "type": "processor",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "gemini",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "processor-2": {
+      "type": "processor",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "processor-3": {
+      "type": "processor",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "groq",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "processor-4": {
+      "type": "processor",
+      "delayMs": 6000,
+      "isRunning": false,
+      "aiProvider": "openrouter",
+      "supported_tiers": [
+        "*"
+      ]
+    },
+    "phase0_submitter-1": {
+      "type": "phase0_submitter",
+      "delayMs": 6000,
+      "isRunning": true,
+      "aiProvider": "ollama",
+      "supported_tiers": [
+        "*"
+      ]
     }
+  },
+  "globalSettings": {
+    "aiProvider": "ollama"
   }
 }

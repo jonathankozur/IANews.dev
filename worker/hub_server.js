@@ -7,6 +7,10 @@ const treeKill = require('tree-kill');
 const fs = require('fs');
 const path = require('path');
 
+// V2 Imports
+const supabaseV2 = require('../workers_v2_system/config/supabase');
+const autoRunnerV2 = require('./v2_auto_runner');
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -22,14 +26,9 @@ const CONFIG_FILE = path.join(__dirname, 'hub_config.json');
 // Default starting config
 let systemConfig = {
     instances: {
-        'processor-1': { type: 'processor', delayMs: 2000, useOllama: true, isRunning: false },
         'scraper-1': { type: 'scraper', delayMs: 1800000, isRunning: false },
-        'neutralizer-1': { type: 'neutralizer', delayMs: 120000, isRunning: false },
-        'generator-1': { type: 'generator', delayMs: 60000, isRunning: false },
+        'orchestrator-1': { type: 'orchestrator', delayMs: 5000, isRunning: false },
         'image_original-1': { type: 'image_original', delayMs: 60000, isRunning: false },
-        'image_ai-1': { type: 'image_ai', delayMs: 30000, isRunning: false },
-        'image_stock-1': { type: 'image_stock', delayMs: 60000, isRunning: false },
-        'analyzer-1': { type: 'analyzer', delayMs: 15000, isRunning: false },
         'watchdog-1': { type: 'watchdog', delayMs: 60000, isRunning: false },
         'twitter-1': { type: 'twitter', delayMs: 900000, isRunning: false },
         'stats-1': { type: 'stats', delayMs: 86400000, isRunning: false }
@@ -90,6 +89,12 @@ function broadcastLog(instanceId, type, message) {
     console.log(`[${instanceId}] ${message.toString().trim()}`);
 }
 
+// Hook up the V2 AutoRunner logs to the central broadcast system
+autoRunnerV2.setLogCallback((logEvent) => {
+    io.emit('workerLog', logEvent);
+    console.log(`[V2-AutoR] ${logEvent.message}`);
+});
+
 function startWorkerProcess(instanceId) {
     if (activeProcesses[instanceId]) {
         return; // Already running
@@ -99,8 +104,10 @@ function startWorkerProcess(instanceId) {
     if (!instanceConf) return;
 
     let aiFlag = '';
-    // Only pass ai flag if the instance type supports/requires it (like processor)
-    if (instanceConf.useOllama !== undefined) {
+    // Use new provider flag for processor
+    if (instanceConf.type === 'processor') {
+        aiFlag = `--provider=${instanceConf.aiProvider || 'ollama'}`;
+    } else if (instanceConf.useOllama !== undefined) {
         aiFlag = instanceConf.useOllama ? '--ai=ollama' : '--ai=gemini';
     }
 
@@ -110,8 +117,20 @@ function startWorkerProcess(instanceId) {
 
     const args = ['run_worker.js', taskFlag, '--mode=continuous', instanceFlag, delayFlag];
     if (aiFlag) args.push(aiFlag);
+    if (instanceConf.supported_tiers && Array.isArray(instanceConf.supported_tiers)) {
+        args.push(`--supportedTiers=${instanceConf.supported_tiers.join(',')}`);
+    }
 
-    broadcastLog(instanceId, 'system', `Iniciando proceso: node ${args.join(' ')}`);
+    // Inyectar dinámicamente todos los prompts configurados
+    if (instanceConf.prompts) {
+        for (const [key, value] of Object.entries(instanceConf.prompts)) {
+            if (value) {
+                args.push(`--prompt_${key}=${value}`);
+            }
+        }
+    }
+
+    broadcastLog(instanceId, 'system', `Iniciando proceso CMD: node ${args.join(' ')}`);
 
     // Spawn hidden child process
     const child = spawn('node', args, {
@@ -172,17 +191,14 @@ app.post('/api/instances', (req, res) => {
 
     // Default configs per type
     const defaultDelays = {
-        processor: 2000,
         scraper: 1800000,
-        neutralizer: 120000,
-        generator: 60000,
-        analyzer: 15000,
+        orchestrator: 5000,
         watchdog: 60000,
         twitter: 900000,
+        twitterAudit: 3600000,
         image_original: 60000,
-        image_ai: 30000,
-        image_stock: 60000,
-        stats: 86400000
+        stats: 86400000,
+        translator: 30000
     };
 
     // Find unique ID
@@ -199,9 +215,10 @@ app.post('/api/instances', (req, res) => {
         isRunning: false
     };
 
-    // Only add useOllama if processor
+    // Only add aiProvider if processor
     if (type === 'processor') {
-        newConf.useOllama = true;
+        newConf.aiProvider = 'ollama';
+        newConf.supported_tiers = ["*"];
     }
 
     systemConfig.instances[newId] = newConf;
@@ -260,6 +277,109 @@ app.put('/api/instances/:id/config', (req, res) => {
     } else {
         res.status(404).json({ error: 'Instance not found' });
     }
+});
+
+// --- API ROUTES V2 ---
+
+app.get('/api/v2/articles', async (req, res) => {
+    try {
+        const { data, error } = await supabaseV2
+            .from('v2_articles')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        if (error) {
+            console.error("Supabase V2 Error:", error);
+            return res.status(500).json({ error: error.message });
+        }
+        res.json(data || []);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/v2/execute', (req, res) => {
+    const { id, aiProvider } = req.body;
+    if (!id) return res.status(400).json({ error: 'Missing article ID' });
+
+    const provider = aiProvider || 'ollama';
+    broadcastLog('Pipeline V2', 'system', `🚀 Disparando ejecución manual para: ${id.substring(0, 8)}... (Motor: ${provider})`);
+
+    const child = spawn('node', ['../workers_v2_system/maintenance_execute.js', `--id=${id}`, `--ai=${provider}`], {
+        cwd: __dirname,
+        shell: true
+    });
+
+    child.stdout.on('data', (data) => broadcastLog('Pipeline V2', 'info', `[Manual EX] ${data}`));
+    child.stderr.on('data', (data) => broadcastLog('Pipeline V2', 'error', `[Manual EX] ${data}`));
+
+    // Respond immediately since execution can take minutes (AI)
+    res.json({ success: true, message: 'Ejecución manual iniciada en background' });
+});
+
+app.post('/api/v2/twitter', (req, res) => {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: 'Missing article ID' });
+
+    broadcastLog('Pipeline V2', 'system', `🐦 Disparando Publicador X/Twitter para: ${id.substring(0, 8)}...`);
+
+    const child = spawn('node', ['../workers_v2_system/04_twitter_publisher.js', `--id=${id}`], {
+        cwd: __dirname,
+        shell: true
+    });
+
+    child.stdout.on('data', (data) => broadcastLog('Pipeline V2', 'info', `[X/Twitter] ${data}`));
+    child.stderr.on('data', (data) => broadcastLog('Pipeline V2', 'error', `[X/Twitter] ${data}`));
+
+    child.on('close', (code) => {
+        if (code === 0) {
+            broadcastLog('Pipeline V2', 'system', `✅ Hilo de Twitter publicado exitosamente.`);
+            res.json({ success: true, message: 'Hilo publicado' });
+        } else {
+            res.status(500).json({ error: 'Publicación falló con código ' + code });
+        }
+    });
+});
+
+app.post('/api/v2/revert', (req, res) => {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: 'Missing article ID' });
+
+    broadcastLog('Pipeline V2', 'system', `🔙 Disparando Rollback manual para: ${id.substring(0, 8)}... espere por favor.`);
+
+    const child = spawn('node', ['../workers_v2_system/maintenance_revert.js', `--id=${id}`], {
+        cwd: __dirname,
+        shell: true
+    });
+
+    child.stdout.on('data', (data) => broadcastLog('Pipeline V2', 'info', `[Rollback] ${data}`));
+    child.stderr.on('data', (data) => broadcastLog('Pipeline V2', 'error', `[Rollback] ${data}`));
+
+    child.on('close', (code) => {
+        if (code === 0) {
+            broadcastLog('Pipeline V2', 'system', `✅ Rollback completado exitosamente.`);
+            res.json({ success: true, message: 'Rollback completado' });
+        } else {
+            res.status(500).json({ error: 'Rollback fallo con código ' + code });
+        }
+    });
+});
+
+app.post('/api/v2/autorunner/toggle', (req, res) => {
+    const { action, aiProvider } = req.body; // action = 'start' | 'stop'
+    if (action === 'start') {
+        const provider = aiProvider || 'ollama';
+        const started = autoRunnerV2.start(provider);
+        res.json({ success: started, status: autoRunnerV2.getStatus() });
+    } else {
+        const stopped = autoRunnerV2.stop();
+        res.json({ success: stopped, status: autoRunnerV2.getStatus() });
+    }
+});
+
+app.get('/api/v2/autorunner/status', (req, res) => {
+    res.json(autoRunnerV2.getStatus());
 });
 
 

@@ -10,29 +10,9 @@ export async function GET(request: NextRequest) {
 
     try {
         let query = supabase
-            .from('neutral_news')
-            .select(`
-                id,
-                title,
-                slug,
-                category,
-                objective_summary,
-                created_at,
-                raw_article:raw_articles!inner (
-                  source_name,
-                  source_url,
-                  title,
-                  image_url_original,
-                  image_url_ai,
-                  image_url_stock
-                ),
-                analysis:news_analysis!inner (
-                    detected_bias,
-                    manipulation_tactics,
-                    omitted_context,
-                    fact_checks
-                )
-            `)
+            .from('v2_articles')
+            .select('*')
+            .in('status', ['READY_TO_PUBLISH', 'PUBLISHED'])
             .order('created_at', { ascending: false })
             .limit(limit);
 
@@ -41,12 +21,11 @@ export async function GET(request: NextRequest) {
         }
 
         if (sourceFilter && sourceFilter !== 'all') {
-            query = query.eq('raw_articles.source_name', sourceFilter);
+            query = query.eq('source_domain', sourceFilter);
         }
 
         if (tacticFilter && tacticFilter !== 'all') {
-            // manipulation_tactics is a jsonb array of strings
-            query = query.contains('news_analysis.manipulation_tactics', [tacticFilter]);
+            query = query.contains('manipulation_tactics', [tacticFilter]);
         }
 
         const { data, error } = await query;
@@ -58,30 +37,28 @@ export async function GET(request: NextRequest) {
 
         // Map data to flat structure for the Neutra UI
         const mappedData = data.map((item: any) => {
-            const relatedRaw = Array.isArray(item.raw_article) ? item.raw_article[0] : item.raw_article;
-            const relatedAnalysis = Array.isArray(item.analysis) ? item.analysis[0] : item.analysis;
-
             return {
                 id: item.id,
-                title_neutral: item.title,
+                title_neutral: item.clean_title,
                 slug: item.slug,
-                category: item.category,
-                objective_summary: item.objective_summary,
+                category: item.category || 'General',
+                objective_summary: item.clean_body,
                 created_at: item.created_at,
 
-                // From raw_articles
-                source_name: relatedRaw?.source_name,
-                source_url: relatedRaw?.source_url,
-                title_original: relatedRaw?.title,
-                image_url_original: relatedRaw?.image_url_original,
-                image_url_ai: relatedRaw?.image_url_ai,
-                image_url_stock: relatedRaw?.image_url_stock,
+                // Metadata de origen
+                source_name: item.source_domain,
+                source_url: item.original_url,
+                title_original: item.raw_title,
+                image_url_original: item.image_url,
+                image_url_ai: null,
+                image_url_stock: null,
 
-                // From news_analysis
-                detected_bias: relatedAnalysis?.detected_bias,
-                manipulation_tactics: relatedAnalysis?.manipulation_tactics || [],
-                omitted_context: relatedAnalysis?.omitted_context,
-                fact_checks: relatedAnalysis?.fact_checks || []
+                // Análisis V2
+                detected_bias: item.bias,
+                manipulation_tactics: item.manipulation_tactics || [],
+                omitted_context: item.full_analysis_text,
+                fact_checking_text: item.fact_checking_text, // En V2 es String, no array
+                bias_score: item.bias_score
             };
         });
 

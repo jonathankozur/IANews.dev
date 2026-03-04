@@ -1,21 +1,33 @@
 require('dotenv').config();
 
-// Importamos todas las tareas (estrategias)
 const tasks = {
-    'processor': require('./tasks/processorTask'),
     'scraper': require('./tasks/scraperTask'),
-    'neutralizer': require('./tasks/neutralizerTask'),
-    'generator': require('./tasks/generatorTask'),
     'image_original': require('./tasks/imageOriginalTask'),
-    'image_ai': require('./tasks/imageAiTask'),
-    'image_stock': require('./tasks/imageStockTask'),
-    'analyzer': require('./tasks/analyzerTask'),
     'watchdog': require('./tasks/watchdogTask'),
     'twitter': require('./tasks/twitterTask'),
-    'stats': require('./tasks/statsTask')
+    'stats': require('./tasks/statsTask'),
+    'twitter_audit': require('./tasks/twitterAuditTask'),
+    'processor': require('./tasks/processorTask'), // The AI Queue Consumer
+
+    // Asynchronous Choreography
+    'phase0_submitter': require('./tasks/phase0Submitter'),
+    'phase0_receiver': require('./tasks/phase0Receiver'),
+    'phase1_submitter': require('./tasks/phase1Submitter'),
+    'phase1_receiver': require('./tasks/phase1Receiver'),
+    'phase2_submitter': require('./tasks/phase2Submitter'),
+    'phase2_receiver': require('./tasks/phase2Receiver'),
+    'phase_qcb_submitter': require('./tasks/phaseQcBSubmitter'),
+    'phase_qcb_receiver': require('./tasks/phaseQcBReceiver'),
+    'phase3_submitter': require('./tasks/phase3Submitter'),
+    'phase3_receiver': require('./tasks/phase3Receiver'),
+    'phase_qca_receiver': require('./tasks/phaseQcAReceiver')
 };
 
+const promptManager = require('./utils/promptManager');
+
 async function startWorker() {
+    await promptManager.init();
+
     const args = process.argv.slice(2);
 
     // Buscar los argumentos soportados
@@ -24,17 +36,29 @@ async function startWorker() {
     const delayArg = args.find(arg => arg.startsWith('--delay='));
     const instanceArg = args.find(arg => arg.startsWith('--instanceId='));
     const instanceId = instanceArg ? instanceArg.split('=')[1] : null;
-
-    // --ai flag toma prioridad absoluta sobre la variable de entorno
-    // Esto permite que el Hub sobreescriba la config del .env por instancia
-    const aiFlag = args.find(arg => arg.startsWith('--ai='));
     const dryRun = args.includes('--dryRun');
-    let useOllama;
-    if (aiFlag) {
-        useOllama = aiFlag === '--ai=ollama';
+
+    // --provider flag o fallback a .env / --ai flag
+    const providerFlag = args.find(arg => arg.startsWith('--provider='));
+    let aiProvider = 'ollama';
+    if (providerFlag) {
+        aiProvider = providerFlag.split('=')[1];
     } else {
-        // Sin flag explícito, usamos el .env como fallback
-        useOllama = process.env.AI_PROVIDER === 'ollama';
+        const aiFlag = args.find(arg => arg.startsWith('--ai='));
+        if (aiFlag) {
+            aiProvider = aiFlag === '--ai=ollama' ? 'ollama' : 'gemini';
+        } else {
+            aiProvider = process.env.AI_PROVIDER || 'ollama';
+        }
+    }
+
+    const useOllama = aiProvider === 'ollama';
+
+    const tiersArg = args.find(arg => arg.startsWith('--supportedTiers='));
+    let supportedTiers = null;
+    if (tiersArg) {
+        const tiersStr = tiersArg.split('=')[1];
+        supportedTiers = tiersStr.split(',').map(t => t === '*' ? '*' : parseInt(t, 10));
     }
 
     if (!taskArg) {
@@ -50,7 +74,6 @@ async function startWorker() {
         process.exit(1);
     }
 
-    // Calcular el delay final
     let sleepMs = taskConfig.delayMs || 60000;
     if (delayArg) {
         sleepMs = parseInt(delayArg.split('=')[1], 10);
@@ -59,14 +82,27 @@ async function startWorker() {
     const displayName = instanceId || taskName;
 
     console.log(`\n🚀 [Task Runner] Iniciando Worker -> Especialidad: [${taskName.toUpperCase()}] | Instancia: [${displayName}]`);
-    console.log(`[🧠 IA Motor] ${useOllama ? 'OLLAMA (Local)' : 'GEMINI (Nube)'}`);
+    console.log(`[🧠 IA Motor] ${aiProvider.toUpperCase()}`);
     console.log(`[🔄 Modo] ${isContinuous ? 'CONTINUO' : 'ÚNICA VEZ'}`);
+
+    // Extraer TODOS los prompts inyectados interactivamente por Hub (--prompt_LLAVE=VALOR)
+    const prompts = {};
+    for (const arg of args) {
+        if (arg.startsWith('--prompt_')) {
+            const [keyFull, val] = arg.split('=');
+            const keyName = keyFull.replace('--prompt_', '');
+            prompts[keyName] = val;
+        }
+    }
 
     // Determinar opciones a pasar a la tarea
     const options = {
         useOllama: useOllama,
+        aiProvider: aiProvider,
         instanceId: instanceId || taskName,
-        dryRun: dryRun
+        dryRun: dryRun,
+        supportedTiers: supportedTiers,
+        prompts: prompts
     };
 
     if (dryRun) {

@@ -35,15 +35,20 @@ export async function GET(req: NextRequest) {
     }
 
     // Mapear a estructura plana para el frontend
-    const mappedData = data.map((item: any) => ({
-        id: item.id,
-        slug: item.slug,
-        title_neutral: item.title,
-        title_original: item.raw?.title,
-        source_name: item.raw?.source_name,
-        detected_bias: item.analysis?.[0]?.detected_bias || 'Sin analizar',
-        created_at: item.created_at
-    }));
+    const mappedData = data.map((item: any) => {
+        const relatedRaw = Array.isArray(item.raw) ? item.raw[0] : item.raw;
+        const relatedAnalysis = Array.isArray(item.analysis) ? item.analysis[0] : item.analysis;
+
+        return {
+            id: item.id,
+            slug: item.slug,
+            title_neutral: item.title,
+            title_original: relatedRaw?.title,
+            source_name: relatedRaw?.source_name,
+            detected_bias: relatedAnalysis?.detected_bias || 'Sin analizar',
+            created_at: item.created_at
+        };
+    });
 
     return NextResponse.json({ data: mappedData, count });
 }

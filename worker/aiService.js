@@ -1,5 +1,6 @@
 require('dotenv').config();
 const supabase = require('./supabaseClient');
+const promptManager = require('./utils/promptManager');
 
 // Polling interval defaults to 3000ms
 const POLL_INTERVAL_MS = parseInt(process.env.AI_QUEUE_POLL_INTERVAL_MS || '3000', 10);
@@ -51,27 +52,11 @@ async function enqueueAndAwaitResult(prompt, isJson = false, modelTier = 0) {
     }
 }
 
-async function analizarYExtraerCrudo(textoCrudo, titulo) {
+async function analizarYExtraerCrudo(textoCrudo, titulo, promptName = 'analyzer_bias_extraction') {
     console.log(`[🤖 IA Service Client] Encolando análisis de sesgo original y extracción de hechos...`);
 
-    const prompt = `
-Eres un analista político y lingüístico experto. Tu tarea es analizar el siguiente artículo periodístico y realizar TRES acciones:
-
-1. Calcular el Sesgo Original: Determina si el texto está inclinado a la 'Izquierda', 'Derecha', o si es de 'Centro'. Calcula un porcentaje de qué tan fuerte es ese sesgo (0 a 100).
-2. Extraer Hechos: Escribe un resumen completamente frío, neutral e impersonal (máximo 80-100 palabras) usando solo los hechos comprobables, eliminando adjetivos emocionales o de opinión.
-3. Redactar Titular Neutro: Reescribí el titular original eliminando completamente el sesgo. El titular neutro debe describir el hecho sin carga emotiva, adjetivos valorativos ni framing ideológico. Máximo 15 palabras. SIEMPRE EN ESPAÑOL, aunque el texto original esté en otro idioma.
-
-Título Original: "${titulo}"
-Texto Original: "${textoCrudo.substring(0, 3000)}"
-
-IMPORTANTE: Responde ÚNICAMENTE con un JSON válido usando esta estructura exacta. El campo "neutral_title" y "objective_summary" SIEMPRE deben estar en ESPAÑOL:
-{
-  "original_bias_direction": "Izquierda" | "Derecha" | "Centro",
-  "original_bias_score": Número de 0 a 100,
-  "objective_summary": "Resumen neutral EN ESPAÑOL de 80-100 palabras",
-  "neutral_title": "Titular reescrito sin sesgo EN ESPAÑOL (máximo 15 palabras)"
-}
-`;
+    const prompt = promptManager.getPrompt(promptName, { titulo, textoCrudo: textoCrudo.substring(0, 3000) });
+    if (!prompt) throw new Error(`Prompt '${promptName}' no encontrado.`);
 
     try {
         const responseText = await enqueueAndAwaitResult(prompt, true, 0);
@@ -82,50 +67,11 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido usando esta estructura exac
     }
 }
 
-async function generarVariantesDeNoticia(hechosObjetivos) {
+async function generarVariantesDeNoticia(hechosObjetivos, promptName = 'generator_variants') {
     console.log(`[🤖 IA Service Client] Encolando procesamiento de hechos para i18n...`);
 
-    const prompt = `
-Eres un analista de noticias global y editor web enfocado en la viralidad.
-Se te dará un conjunto de hechos objetivos neutrales en español.
-Tu tarea es escribir tres versiones breves (aprox 2 párrafos cada una) del artículo adaptadas a tres corrientes ideológicas diferentes.
-DEBES HACER ESTO PARA DOS IDIOMAS SIMULTÁNEAMENTE: Español ('es') e Inglés ('en').
-
-INTRUCCION CRITICA 1: Los títulos ("title") de CADA versión en AMBOS idiomas deben ser EXTREMADAMENTE CLICKBAIT, virales y de alto impacto emocional, diseñados para que el lector haga clic inmediatamente. Usa frases fuertes, mayúsculas ocasionales y plantea interrogantes si es necesario.
-INTRUCCION CRITICA 2: Además del clickbait, provee un "label" corto para cada perspectiva que describa a quién va dirigida esta variante según la temática de la noticia (Ej: Fanático X / Neutral / Fanático Y).
-INTRUCCION CRITICA 3: Analiza la relevancia geográfica de la noticia y asigna el ISO Alpha-2 (Ej 'AR', 'US', 'ES', 'MX'). Si es una noticia de impacto global (Ej: guerra, tech big tech, pandemia) asigna 'GLOBAL'.
-
-Corrientes Clásicas (usar como guía abstracta):
-1. Izquierda/Postura A (Enfoque social, regulación, trabajador, fanático local, emocionado).
-2. Centro/Postura B (Enfoque neutral, equilibrado, hechos fríos, impacto macroeconómico o deportivo analítico).
-3. Derecha/Postura C (Enfoque en mercado, libertad, desregulación, fanático rival o crítico).
-
-Asigna una categoría general única a esta noticia.
-Asigna un "sentiment_score" del -1.0 (muy negativo) al 1.0 (muy positivo).
-
-Hechos Objetivos: "${hechosObjetivos}"
-
-IMPORTANTE: TU RESPUESTA DEBE SER ÚNICAMENTE UN JSON VÁLIDO CON LA SIGUIENTE ESTRUCTURA EXACTA. NADA MÁS.
-{
-  "geo_target": "String (ISO-2 o GLOBAL)",
-  "category": "String",
-  "translations": [
-    {
-      "language": "es",
-      "objective_summary": "String",
-      "left": { "label": "String", "title": "String", "content": "String", "sentiment": Number },
-      "center": { "label": "String", "title": "String", "content": "String", "sentiment": Number },
-      "right": { "label": "String", "title": "String", "content": "String", "sentiment": Number }
-    },
-    {
-      "language": "en",
-      "objective_summary": "String",
-      "left": { "label": "String", "title": "String", "content": "String", "sentiment": Number },
-      "center": { "label": "String", "title": "String", "content": "String", "sentiment": Number },
-      "right": { "label": "String", "title": "String", "content": "String", "sentiment": Number }
-    }
-  ]
-}`;
+    const prompt = promptManager.getPrompt(promptName, { hechosObjetivos });
+    if (!prompt) throw new Error(`Prompt '${promptName}' no encontrado.`);
 
     try {
         const responseText = await enqueueAndAwaitResult(prompt, true, 0);
@@ -158,7 +104,22 @@ IMPORTANTE: TU RESPUESTA DEBE SER ÚNICAMENTE UN JSON VÁLIDO CON LA SIGUIENTE E
     }
 }
 
-async function esNoticiaDePoliticaOEconomiaArgentina(titulo, texto) {
+async function generarNoticiaNeutral(payload, promptName = 'generator_neutral') {
+    console.log(`[🤖 IA Service Client] Encolando generación de noticia neutral...`);
+
+    const prompt = promptManager.getPrompt(promptName, payload);
+    if (!prompt) throw new Error(`Prompt '${promptName}' no encontrado.`);
+
+    try {
+        const responseText = await enqueueAndAwaitResult(prompt, true, 4);
+        return JSON.parse(responseText);
+    } catch (error) {
+        console.error("[❌ IA Service Client] Failed to generate neutral news:", error.message);
+        return null;
+    }
+}
+
+async function esNoticiaDePoliticaOEconomiaArgentina(titulo, texto, promptName = 'analyzer_relevance') {
     if (!texto || texto.length < 100) return false;
 
     const lowerTitle = titulo.toLowerCase();
@@ -167,18 +128,8 @@ async function esNoticiaDePoliticaOEconomiaArgentina(titulo, texto) {
 
     console.log(`[🤖 IA Service Client] Encolando evaluación de relevancia temática: "${titulo}"`);
 
-    const prompt = `
-Determina si el siguiente artículo trata DIRECTAMENTE de POLÍTICA o ECONOMÍA ARGENTINA.
-Si es sobre espectáculos, farándula, chismes, policiales menores, deportes (salvo que implique política nacional), clima, o noticias internacionales que no afectan a Argentina, devuelve false.
-Si es sobre el Presidente, ministros, leyes, inflación, dólar, cepo, Congreso, paritarias, gobernadores, etc., devuelve true.
-
-Título: "${titulo}"
-Extracto: "${texto.substring(0, 600)}"
-
-Reglas:
-1. Responde ÚNICAMENTE un JSON válido con esta estructura: {"es_relevante": boolean}
-2. Sé exigente. Ante la duda de si es un policial suelto o nota de color, pon false.
-`;
+    const prompt = promptManager.getPrompt(promptName, { titulo, texto: texto.substring(0, 600) });
+    if (!prompt) throw new Error(`Prompt '${promptName}' no encontrado.`);
 
     try {
         const responseText = await enqueueAndAwaitResult(prompt, true, 6);
@@ -190,68 +141,128 @@ Reglas:
     }
 }
 
-async function generarTweetViral(noticia) {
-    console.log(`[🤖 IA Service Client] Encolando generación de tweet viral...`);
+async function generarTweetViral(noticia, promptName = 'twitter_thread') {
+    console.log(`[🤖 IA Service Client] Encolando generación de hilo viral para X...`);
 
-    const prompt = `
-Eres un Community Manager experto en periodismo político y viralidad en Twitter/X.
-Tu objetivo es redactar un (1) único tweet MUY ENGANCHADOR para promocionar un artículo de nuestro portal de noticias "IANews".
-La particularidad de nuestro portal es que ofrecemos la misma noticia redactada desde tres enfoques (Izquierda, Centro y Derecha) para que la gente "salga de su burbuja".
-
-Noticia: "${noticia.tituloOriginal}"
-Resumen: "${noticia.resumen}"
-Titular de Izquierda: "${noticia.izquierda}"
-Titular de Derecha: "${noticia.derecha}"
-
-Reglas estrictas para el Tweet:
-1. MAXIMO 200 caracteres (dejaremos espacio para el link que se agregará después).
-2. Tono incisivo, filoso o que incite al debate (muy al estilo del "Termo Político" o Twitter Argentina).
-3. No uses hashtags molestos como #Noticias ni emoticons innecesarios (1 o 2 máximo).
-4. Plantea el choque de visiones basado en los titulares de izquierda y derecha provistos.
-5. NO incluyas a qué enlace deben hacer clic (eso lo manejo yo por código).
-6. Responde ÚNICAMENTE con el texto del tweet, sin comillas alrededor ni texto introductorio. 
-`;
+    const prompt = promptManager.getPrompt(promptName, {
+        tituloOriginal: noticia.tituloOriginal,
+        resumen: noticia.resumen,
+        izquierda: noticia.izquierda,
+        derecha: noticia.derecha
+    });
+    if (!prompt) throw new Error(`Prompt '${promptName}' no encontrado.`);
 
     try {
-        const text = await enqueueAndAwaitResult(prompt, false, 4);
-        return text.trim().replace(/^"|"$/g, '');
+        const responseText = await enqueueAndAwaitResult(prompt, true, 4);
+        const tweetsRaw = JSON.parse(responseText);
+        let tweets = tweetsRaw;
+
+        // Si la IA envolvió el array en un objeto (común en algunos modelos)
+        if (tweetsRaw && typeof tweetsRaw === 'object' && !Array.isArray(tweetsRaw)) {
+            tweets = tweetsRaw.tweets || tweetsRaw.thread || tweetsRaw.hilo || Object.values(tweetsRaw).find(Array.isArray);
+        }
+
+        if (!Array.isArray(tweets) || tweets.length === 0) {
+            throw new Error("La IA no devolvió un array válido de tweets.");
+        }
+        return tweets;
     } catch (error) {
-        console.error("[❌ IA Service Client] Failed to generate Tweet:", error.message);
+        console.error("[❌ IA Service Client] Failed to generate Tweet Thread:", error.message);
         return null;
     }
 }
 
-async function auditarSesgoPeriodistico(textoCrudo) {
-    console.log(`[🤖 IA Service Client] Encolando Auditoría Forense de Sesgo...`);
+async function auditarSesgoPeriodistico(textoCrudo, promptName = 'analyzer_audit') {
+    console.log(`[🤖 IA Service Client] Encolando auditoría profunda de sesgo...`);
 
-    const prompt = `
-Eres un riguroso auditor de medios y experto en análisis del discurso periodístico.
-Tu misión es diseccionar el siguiente artículo crudo para encontrar las huellas de su sesgo ideológico, la ideología subyacente que promociona, y las tácticas de manipulación que emplea para alterar la percepción del lector.
+    const prompt = promptManager.getPrompt(promptName, { textoCrudo: textoCrudo.substring(0, 3000) });
+    if (!prompt) throw new Error(`Prompt '${promptName}' no encontrado.`);
 
-Artículo original:
-"${textoCrudo.substring(0, 4000)}"
-
-Reglas estrictas de salida:
-Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura exacta:
-{
-  "detected_bias": "String corto (ej: 'Centro-Derecha, Oficialista', 'Izquierda, Opositor', 'Amarillismo de Mercado')",
-  "manipulation_tactics": ["Táctica 1", "Táctica 2", "Táctica 3"], // Ej: ["Apelación a la emoción", "Falacia de hombre de paja", "Sesgo de omisión", "Selección selectiva de datos"]
-  "omitted_context": "String explicando brevemente qué información crucial parece faltar o haber sido minimizada a propósito para sostener la narrativa.",
-  "fact_checks": [
-    {
-      "claim": "La afirmación concreta hecha en el texto",
-      "truth": "El contexto u otra perspectiva objetiva real",
-      "is_false": boolean (true si es sospechosa de falacia/mentira/exageración, false si es cierta pero maliciosamente presentada)
+    try {
+        const responseText = await enqueueAndAwaitResult(prompt, true, 0); // Usamos modelo Tier 0 (Gemini Flash) para esta tarea analítica
+        return JSON.parse(responseText);
+    } catch (error) {
+        console.error("[❌ IA Service Client] Error en auditoría de sesgo:", error.message);
+        return null;
     }
-  ] // Extrae al menos 2 fact-checks
 }
-`;
+
+async function generarTituloSolo(resumen, promptName = 'neutralizer_title') {
+    // ... same as before
+    console.log(`[🤖 IA Service Client] Encolando micro-tarea: Generación de título faltante...`);
+
+    const prompt = promptManager.getPrompt(promptName, { resumen });
+    if (!prompt) throw new Error(`Prompt '${promptName}' no encontrado.`);
+
+    try {
+        const responseText = await enqueueAndAwaitResult(prompt, true, 4);
+        const json = JSON.parse(responseText);
+        return json.neutral_title || null;
+    } catch (error) {
+        console.error("[❌ IA Service Client] Micro-task title generation failed:", error.message);
+        return null;
+    }
+}
+
+async function corregirIdiomaJson(payloadStr, promptName = 'translator_correction') {
+    console.log(`[🤖 IA Service Client] Encolando tarea de post-procesamiento (Traducción/Corrección)...`);
+
+    const prompt = promptManager.getPrompt(promptName, { payloadStr });
+    if (!prompt) throw new Error(`Prompt '${promptName}' no encontrado.`);
 
     try {
         const responseText = await enqueueAndAwaitResult(prompt, true, 2);
         return JSON.parse(responseText);
     } catch (error) {
-        console.error("[❌ IA Service Client] Falló la auditoría forense:", error.message);
+        console.error("[❌ IA Service Client] Error en corrección de idioma:", error.message);
+        return null;
+    }
+}
+
+async function generarVarianteSimple(promptStr) {
+    console.log(`[🤖 IA Service Client] Encolando consulta de QC / Sanidad...`);
+    try {
+        const responseText = await enqueueAndAwaitResult(promptStr, false, 4); // JSON no restrictivo para QC
+        return responseText;
+    } catch (error) {
+        console.error("[❌ IA Service Client] Error en consulta simple QC:", error.message);
+        throw error;
+    }
+}
+
+async function generarHiloAuditoriaDiaria(datosCrudos, promptName = 'twitter_audit_daily') {
+    console.log(`[🤖 IA Service Client] Encolando generación de Hilo de Auditoría Diaria...`);
+
+    const prompt = promptManager.getPrompt(promptName, { datosCrudos: JSON.stringify(datosCrudos, null, 2) });
+    if (!prompt) throw new Error(`Prompt '${promptName}' no encontrado.`);
+
+    try {
+        const responseText = await enqueueAndAwaitResult(prompt, true, 4);
+
+        // Limpiamos posibles bloques markdown
+        const cleanedText = responseText.replace(/^```json/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
+
+        try {
+            let tweets = JSON.parse(cleanedText);
+
+            // Fallback si la IA devuelve un objeto en lugar de un array
+            if (tweets && typeof tweets === 'object' && !Array.isArray(tweets)) {
+                tweets = Object.values(tweets).map(val => {
+                    if (Array.isArray(val)) return val.join(' ');
+                    return typeof val === 'string' ? val : JSON.stringify(val);
+                }).filter(Boolean);
+            }
+
+            if (!Array.isArray(tweets) || tweets.length === 0) {
+                throw new Error("La IA no devolvió un array válido de tweets para la auditoría.");
+            }
+            return tweets;
+        } catch (parseErr) {
+            console.error(`[❌ IA Service Client] Falló JSON parse. Texto Crudo: \n>>>\n${cleanedText}\n<<<`);
+            throw parseErr;
+        }
+    } catch (error) {
+        console.error("[❌ IA Service Client] Failed to generate Audit Thread:", error.message);
         return null;
     }
 }
@@ -261,5 +272,11 @@ module.exports = {
     analizarYExtraerCrudo,
     esNoticiaDePoliticaOEconomiaArgentina,
     generarTweetViral,
-    auditarSesgoPeriodistico
+    auditarSesgoPeriodistico,
+    generarTituloSolo,
+    corregirIdiomaJson,
+    generarHiloAuditoriaDiaria,
+    generarVarianteSimple,
+    generarNoticiaNeutral
 };
+

@@ -5,12 +5,6 @@ import Link from 'next/link';
 import { AlertTriangle, CheckCircle, Search } from 'lucide-react';
 import BiasGauge from './BiasGauge';
 
-interface FactCheck {
-    claim: string;
-    truth: string;
-    is_false: boolean;
-}
-
 interface SplitNewsCardProps {
     article: {
         id: string;
@@ -22,12 +16,12 @@ interface SplitNewsCardProps {
         source_name: string;
         source_url: string;
         title_original: string;
-        image_url_original?: string;
-        image_url_stock?: string;
+        image_url_original?: string | null;
+        image_url_stock?: string | null;
         detected_bias?: string;
         manipulation_tactics?: string[];
         omitted_context?: string;
-        fact_checks?: FactCheck[];
+        fact_checking_text?: string;
     };
     isDetailPage?: boolean;
 }
@@ -167,22 +161,16 @@ export default function SplitNewsCard({ article, isDetailPage = false }: SplitNe
                             </div>
                         )}
 
-                        {article.fact_checks && article.fact_checks.length > 0 && (
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-900 mb-4 border-b border-slate-100 pb-2">Verificación de Hechos (Fact-Checking)</h3>
-                                <div className="grid gap-4 md:grid-cols-2">
-                                    {article.fact_checks.map((check, idx) => (
-                                        <div key={idx} className={`border rounded-lg p-4 ${check.is_false ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
-                                            <p className="text-sm font-bold text-slate-900 mb-2 flex items-start gap-2">
-                                                {check.is_false ? <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5" /> : <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5" />}
-                                                Afirmación Original:
-                                            </p>
-                                            <p className="text-sm text-slate-600 italic mb-3">&ldquo;{check.claim}&rdquo;</p>
-
-                                            <p className="text-sm font-bold text-slate-900 mb-1">La Realidad Objetiva:</p>
-                                            <p className="text-sm text-slate-700">{check.truth}</p>
-                                        </div>
-                                    ))}
+                        {article.fact_checking_text && (
+                            <div className="mb-8">
+                                <h3 className="text-lg font-bold text-slate-900 mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                                    <CheckCircle className="w-5 h-5 text-emerald-600" />
+                                    Verificación de Hechos (Fact-Checking)
+                                </h3>
+                                <div className="border border-emerald-200 rounded-lg p-5 bg-emerald-50 shadow-sm">
+                                    <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                        {article.fact_checking_text}
+                                    </p>
                                 </div>
                             </div>
                         )}

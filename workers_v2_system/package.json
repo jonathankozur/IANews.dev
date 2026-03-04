@@ -1,0 +1,20 @@
+{
+    "name": "workers_v2_system",
+    "version": "1.0.0",
+    "description": "Limpieza de arquitectura v2 orientada a Calidad por sobre velocidad (LLM-as-a-judge)",
+    "main": "00_scraper_admission.js",
+    "scripts": {
+        "start": "node 00_scraper_admission.js",
+        "test": "node 00_scraper_admission.js --test"
+    },
+    "dependencies": {
+        "@google/generative-ai": "^0.24.1",
+        "@mozilla/readability": "^0.6.0",
+        "@supabase/supabase-js": "^2.97.0",
+        "axios": "^1.13.5",
+        "dotenv": "^17.3.1",
+        "jsdom": "^28.1.0",
+        "rss-parser": "^3.13.0",
+        "twitter-api-v2": "^1.29.0"
+    }
+}

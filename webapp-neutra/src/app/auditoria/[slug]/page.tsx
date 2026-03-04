@@ -9,44 +9,23 @@ import { notFound } from 'next/navigation';
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
     const resolvedParams = await params;
     const { data } = await supabase
-        .from('neutral_news')
-        .select('title')
+        .from('v2_articles')
+        .select('clean_title')
         .eq('slug', resolvedParams.slug)
         .single();
 
     if (!data) return { title: 'Auditoría no encontrada | Neutra' };
 
     return {
-        title: `${data.title} | Neutra Auditoría Forense`,
+        title: `${data.clean_title} | Neutra Auditoría Forense`,
     };
 }
 
 export default async function AuditDetailPage({ params }: { params: Promise<{ slug: string }> }) {
     const resolvedParams = await params;
     const { data, error } = await supabase
-        .from('neutral_news')
-        .select(`
-        id,
-        title,
-        slug,
-        category,
-        objective_summary,
-        created_at,
-        raw_article:raw_articles!inner (
-          source_name,
-          source_url,
-          title,
-          image_url_original,
-          image_url_ai,
-          image_url_stock
-        ),
-        analysis:news_analysis!inner (
-            detected_bias,
-            manipulation_tactics,
-            omitted_context,
-            fact_checks
-        )
-    `)
+        .from('v2_articles')
+        .select('*')
         .eq('slug', resolvedParams.slug)
         .single();
 
@@ -54,26 +33,23 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ sl
         notFound();
     }
 
-    const relatedRaw = Array.isArray(data.raw_article) ? data.raw_article[0] : data.raw_article;
-    const relatedAnalysis = Array.isArray(data.analysis) ? data.analysis[0] : data.analysis;
-
     const article = {
         id: data.id,
-        title_neutral: data.title,
+        title_neutral: data.clean_title,
         slug: data.slug,
-        category: data.category,
-        objective_summary: data.objective_summary,
+        category: data.category || 'General',
+        objective_summary: data.clean_body,
         created_at: data.created_at,
-        source_name: relatedRaw?.source_name,
-        source_url: relatedRaw?.source_url,
-        title_original: relatedRaw?.title,
-        image_url_original: relatedRaw?.image_url_original,
-        image_url_ai: relatedRaw?.image_url_ai,
-        image_url_stock: relatedRaw?.image_url_stock,
-        detected_bias: relatedAnalysis?.detected_bias,
-        manipulation_tactics: relatedAnalysis?.manipulation_tactics || [],
-        omitted_context: relatedAnalysis?.omitted_context,
-        fact_checks: relatedAnalysis?.fact_checks || []
+        source_name: data.source_domain,
+        source_url: data.original_url,
+        title_original: data.raw_title,
+        image_url_original: data.image_url,
+        image_url_ai: null,
+        image_url_stock: null,
+        detected_bias: data.bias,
+        manipulation_tactics: data.manipulation_tactics || [],
+        omitted_context: data.full_analysis_text,
+        fact_checking_text: data.fact_checking_text
     };
 
     return (

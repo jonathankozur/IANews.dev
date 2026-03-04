@@ -6,7 +6,7 @@ module.exports = {
     // 2 segundos (es el más crítico)
     delayMs: 2000,
 
-    execute: async function ({ useOllama, instanceId }) {
+    execute: async function ({ aiProvider, instanceId }) {
         // En worker 0 el motor SÍ importa
 
         // 1. Obtener la fila PENDING más vieja
@@ -44,17 +44,33 @@ module.exports = {
             }
 
             console.log(`\n======================================`);
-            console.log(`[📥 Processor] Procesando Ticket ${ticket.id.substring(0, 8)}... (Motor: ${useOllama ? 'OLLAMA' : 'GEMINI'})`);
+            console.log(`[📥 Processor] Procesando Ticket ${ticket.id.substring(0, 8)}... (Motor: ${aiProvider || 'OLLAMA'})`);
 
-            // 3. Procesar via aiCore o OllamaCore
+            // 3. Procesar via aiCore, OllamaCore, groqCore o openrouterCore
             try {
                 let resultText;
-                if (useOllama) {
-                    // Importacion lazy: solo si realmente se usa Ollama
-                    const { callOllama } = require('../ollamaCore');
-                    resultText = await callOllama(ticket.prompt, ticket.is_json);
-                } else {
-                    resultText = await aiCore.callGeminiWithRetry(ticket.prompt, ticket.is_json, ticket.model_tier, 0);
+
+                // aiProvider is passed via run_worker options
+                const provider = aiProvider || 'ollama';
+
+                switch (provider.toLowerCase()) {
+                    case 'gemini':
+                        resultText = await aiCore.callGeminiWithRetry(ticket.prompt, ticket.is_json, ticket.model_tier || 0, 0);
+                        break;
+                    case 'groq':
+                        const groq = require('../groqCore');
+                        resultText = await groq.callGroq(ticket.prompt, ticket.is_json);
+                        break;
+                    case 'openrouter':
+                        const openrouter = require('../openrouterCore');
+                        resultText = await openrouter.callOpenRouter(ticket.prompt, ticket.is_json);
+                        break;
+                    case 'ollama':
+                    default:
+                        // Importacion lazy
+                        const { callOllama } = require('../ollamaCore');
+                        resultText = await callOllama(ticket.prompt, ticket.is_json);
+                        break;
                 }
 
                 // 4. Marcar como DONE
